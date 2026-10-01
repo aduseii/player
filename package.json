@@ -1,0 +1,137 @@
+{
+  "name": "crave",
+  "version": "1.1.0",
+  "description": "Crave video player",
+  "main": "main.js",
+  "scripts": {
+    "prepare": "node scripts/prepare.js",
+    "start": "node scripts/prepare.js && electron .",
+    "dist:win": "node scripts/prepare.js && electron-builder --win --x64 -p never"
+  },
+  "keywords": [],
+  "author": "Crave",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@ffmpeg/core": "^0.12.6",
+    "@ffmpeg/ffmpeg": "^0.12.10",
+    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
+    "@fontsource/figtree": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "dashjs": "^4.7.4",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
+    "hls.js": "^1.5.13",
+    "resedit": "^3.1.0",
+    "webtorrent-browser": "npm:webtorrent@^1.9.7"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9",
+    "webtorrent": "^1.9.7"
+  },
+  "productName": "Crave",
+  "private": true,
+  "build": {
+    "appId": "app.crave.player",
+    "productName": "Crave",
+    "copyright": "Crave",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "app/**/*",
+      "build/icon.png",
+      "package.json",
+      "!**/*.map",
+      "!**/*.md",
+      "!**/test/**",
+      "!**/node_modules/utp-native/**",
+      "!**/node_modules/playwright*/**"
+    ],
+    "extraResources": [
+      {
+        "from": "bin/ffmpeg.exe",
+        "to": "ffmpeg.exe"
+      },
+      {
+        "from": "bin/ffmpeg.exe.LICENSE",
+        "to": "ffmpeg-LICENSE.txt"
+      }
+    ],
+    "asar": true,
+    "npmRebuild": false,
+    "nodeGypRebuild": false,
+    "buildDependenciesFromSource": false,
+    "afterPack": "./scripts/after-pack.js",
+    "fileAssociations": [
+      {
+        "ext": [
+          "mkv",
+          "mp4",
+          "m4v",
+          "webm",
+          "mov",
+          "avi",
+          "wmv",
+          "ts",
+          "m2ts",
+          "flv",
+          "mpg",
+          "mpeg"
+        ],
+        "name": "Video",
+        "description": "Video file",
+        "icon": "build/icon.ico",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "torrent"
+        ],
+        "name": "Torrent",
+        "description": "Torrent file",
+        "icon": "build/icon.ico",
+        "role": "Viewer"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false,
+      "executableName": "Crave"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Crave",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "uninstallDisplayName": "Crave",
+      "artifactName": "Crave-Setup-${version}.exe",
+      "deleteAppDataOnUninstall": false
+    },
+    "portable": {
+      "artifactName": "Crave-Portable-${version}.exe"
+    },
+    "publish": null
+  }
+}
