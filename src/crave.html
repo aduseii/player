@@ -28,6 +28,7 @@
   --f-body:"Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
   --f-mono:"JetBrains Mono", ui-monospace, "SF Mono", Consolas, monospace;
   --r:10px;
+  --sub-font:"CraveSubFont","Netflix Sans","NetflixSans","Netflix Sans Medium","Figtree",system-ui,sans-serif;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
@@ -121,6 +122,13 @@ video::cue{font-family:var(--f-body);background:rgba(0,0,0,.6);font-size:clamp(1
 .menu .sep{height:1px;background:var(--line);margin:6px 4px}
 .menu .delay{display:flex;align-items:center;gap:6px;padding:6px 8px;font-size:13px}
 .menu .note{padding:4px 8px}
+.subs-layer{position:absolute;left:6%;right:6%;display:flex;flex-direction:column;align-items:center;gap:.1em;pointer-events:none;z-index:2;font-size:var(--sub-size,26px);transition:bottom .2s ease}
+#subsBottom{bottom:7%}
+#subsTop{top:7%}
+.stage:not(.idle):not(.is-empty) #subsBottom{bottom:calc(7% + 64px)}
+.sub-line{font-family:var(--sub-font);font-weight:500;color:#fff;text-align:center;line-height:1.22;max-width:100%;overflow-wrap:anywhere;letter-spacing:.005em;text-shadow:0 0 .08em #000,0 0 .08em #000,0 .04em .12em #000,0 0 .35em rgba(0,0,0,.55)}
+#pgsLayer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2;transition:transform .2s ease}
+.stage:not(.idle):not(.is-empty) #pgsLayer{transform:translateY(-56px)}
 .drop-hint{position:absolute;inset:10px;border:2px dashed var(--honey);border-radius:12px;display:grid;place-items:center;background:#0c0b14e6;font:700 22px var(--f-display);z-index:6}
 
 .spinner{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px;border-radius:50%;border:3px solid #ffffff22;border-top-color:var(--honey);animation:spin .8s linear infinite;z-index:3}
@@ -318,6 +326,9 @@ dialog h3{font:700 22px var(--f-display);margin:0 0 12px}
       <div style="min-width:0">
         <div class="stage is-empty" id="stage" tabindex="-1">
           <video id="video" playsinline preload="metadata"></video>
+          <canvas id="pgsLayer"></canvas>
+          <div class="subs-layer" id="subsTop"></div>
+          <div class="subs-layer" id="subsBottom"></div>
 
           <div class="empty" id="empty">
             <div>
@@ -428,6 +439,11 @@ dialog h3{font:700 22px var(--f-display);margin:0 0 12px}
         <label class="switch"><input type="checkbox" id="setResume"><i></i></label></div>
       <div class="set"><div class="d"><strong>Turn on built-in subtitles</strong><span>Shows a file's own subtitles as soon as it opens, in your browser's language when the file has it.</span></div>
         <label class="switch"><input type="checkbox" id="setAutoSubs"><i></i></label></div>
+      <div class="set"><div class="d"><strong>Subtitle size</strong><span>Subtitles scale with the video, the way streaming services show them.</span></div>
+        <select id="setSubSize"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></div>
+      <div class="set"><div class="d"><strong>Subtitle font</strong><span id="subFontText">Checking for Netflix Sans…</span></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" id="subFontBtn">Add font file…</button><button class="btn sm ghost" id="subFontReset" hidden>Reset</button></div>
+        <input type="file" id="subFontInput" accept=".ttf,.otf,.woff,.woff2" hidden></div>
       <div class="set"><div class="d"><strong>Play next automatically</strong><span>Start the next item in Up next when a video ends.</span></div>
         <label class="switch"><input type="checkbox" id="setAutoNext"><i></i></label></div>
       <div class="set"><div class="d"><strong>Show torrent stats</strong><span>Peers, speed and download progress over the video.</span></div>
@@ -509,7 +525,7 @@ const store = {
   get(k, d){ try { const x = localStorage.getItem("crave:" + k); return x == null ? d : JSON.parse(x); } catch { return d; } },
   set(k, val){ try { localStorage.setItem("crave:" + k, JSON.stringify(val)); } catch {} }
 };
-const DEF = { autoSubs:true, skip:10, speed:1, fmt:"image/png", autoDl:false, resume:true, autoNext:true, stats:true, volume:1, muted:false };
+const DEF = { subSize:"medium", autoSubs:true, skip:10, speed:1, fmt:"image/png", autoDl:false, resume:true, autoNext:true, stats:true, volume:1, muted:false };
 const S = Object.assign({}, DEF, store.get("settings", {}));
 const saveSettings = () => store.set("settings", S);
 let library = store.get("library", []);           // [{id,url,name,kind,pos,dur,updated,marks:[{t,label}]}]
@@ -641,8 +657,8 @@ async function play(src, opts = {}){
   try {
     if (cur.kind === "file") {
       if (/\.torrent$/i.test(cur.file.name)) { await playTorrent(cur.file); }
-      else { if (cur.file.url) v.src = cur.file.url; else { cur.blobUrl = URL.createObjectURL(cur.file); v.src = cur.blobUrl; } inspectFile(cur.file); }
-    } else if (cur.kind === "direct") playDirect(cur.url, true);
+      else { if (cur.file.url) v.src = cur.file.url; else { cur.blobUrl = URL.createObjectURL(cur.file); v.src = cur.blobUrl; } if (N && N.probe && pathOf(cur.file)) inspectNative(); else inspectFile(cur.file); }
+    } else if (cur.kind === "direct") { playDirect(cur.url, true); if (N && N.probe) inspectNative(); }
     else if (cur.kind === "hls") await playHls(cur.url);
     else if (cur.kind === "dash") await playDash(cur.url);
     else if (cur.kind === "torrent") await playTorrent(cur.url);
@@ -717,6 +733,7 @@ async function playTorrentNative(idOrFile){
   if (!cur.nameSet) { cur.name = f.name; const e = lib(myId); if (e) { e.name = f.name; saveLib(); } renderNow(); }
   v.src = f.url; startPlayback();
   engine = { destroy: () => { N.torrentStop(); } };
+  if (N.probe) inspectNative();
   statsTimer = setInterval(async () => { try { const s = await N.torrentStats(); if (s && cur && cur.torrent) { Object.assign(cur.torrent, s); renderStats(); } } catch {} }, 1000);
   renderRailIfInfo();
 }
@@ -864,11 +881,7 @@ const stage = $("#stage"); let idleT;
 function poke(){ stage.classList.remove("idle"); liftSubs(true); clearTimeout(idleT); if (!v.paused) idleT = setTimeout(() => { if (!v.paused && !dragging && !menuKind) { stage.classList.add("idle"); liftSubs(false); } }, 2600); }
 // keep subtitles clear of the control bar while it's showing
 let subsLifted = null;
-function liftSubs(up, force){
-  if (subsLifted === up && !force) return; subsLifted = up;
-  const e = typeof subs !== "undefined" && subs[activeSub]; if (!e || !e.tt || !e.tt.cues) return;
-  const c = e.tt.cues; for (let i = 0; i < c.length; i++) if (!c[i].top) c[i].line = up ? -4 : "auto";
-}
+function liftSubs(){}
 stage.addEventListener("pointermove", poke);
 stage.addEventListener("pointerdown", poke);
 // click video area: play/pause; double-click: fullscreen
@@ -1062,9 +1075,9 @@ function renderRail(){
     const P = cur.probe;
     if (P) {
       if (P.video[0]) rows.push(["Video", P.video[0].cname + (P.video[0].supported ? "" : " (not supported here)")]);
-      P.audio.forEach((t, i) => rows.push([i ? "" : "Audio", [trackLabel(t, i), t.cname, chName(t.channels)].filter(Boolean).join(" · ") + (ext && ext.ai === i ? " (playing, converted)" : t.supported ? "" : " (needs conversion)")]));
+      P.audio.forEach((t, i) => rows.push([i ? "" : "Audio", [trackLabel(t, i), t.cname, chLabel(t)].filter(Boolean).join(" · ") + ((ext ? ext.ai === i : i === 0) ? " (playing)" : "")]));
     }
-    subs.forEach((x, i) => rows.push([i ? "" : "Subtitles", x.label + " · " + x.codec + (x.kind === "image" ? " (picture-based)" : "")]));
+    subs.forEach((x, i) => rows.push([i ? "" : "Subtitles", x.label + " · " + x.codec + (x.kind === "image" ? " (can't be shown)" : x.kind === "pgs" ? " (picture)" : "")]));
     if (cur.url) rows.push(["Link", cur.url]);
     let html = `<dl class="kv">${rows.map(([k, val]) => `<dt>${k}</dt><dd>${esc(val)}</dd>`).join("")}</dl>`;
     if (tainted) html += `<p class="note"><b>Screenshots off for this link.</b> The site serving it doesn't allow other pages to read its frames.</p>`;
@@ -1414,6 +1427,7 @@ async function extractMkvSubs(file, P, entries, onProg, job){
     if (b[tn.n + 2] & 0x06) return; // laced: never used for subtitles
     let rel = (b[tn.n] << 8) | b[tn.n + 1]; if (rel > 32767) rel -= 65536;
     const start = (ctc + rel) * scale, end = dur != null ? start + dur * scale : null;
+    if (e.pgs) { e.pgs.parser.feedBlock(b.subarray(tn.n + 3), start); return; }
     const raw = dec.decode(b.subarray(tn.n + 3));
     const ass = /ASS|SSA/.test(e.track.codec);
     const c = cleanText(ass ? raw.split(",").slice(8).join(",") : raw, ass);
@@ -1589,8 +1603,9 @@ async function readSubText(f){
 /* ================= subtitle tracks ================= */
 let subs = [], activeSub = -1, lastSub = -1, job = { dead: true };
 function makeSubEntry(o){
-  const e = { ...o, tt: null, count: 0, status: o.kind === "text" ? "loading" : "image", progress: 0, offset: 0, lastOpen: null };
+  const e = { ...o, tt: null, pgs: null, count: 0, status: o.kind === "image" ? "image" : o.native ? "idle" : "loading", progress: 0, offset: 0, lastOpen: null };
   if (o.kind === "text") { e.tt = v.addTextTrack("subtitles", o.label, langCode(o.lang) || ""); e.tt.mode = "disabled"; }
+  if (o.kind === "pgs") { e.pgs = { displays: [] }; e.pgs.parser = new PgsParser((pts, w, h, items) => pgsStore(e, pts, w, h, items)); }
   subs.push(e); return e;
 }
 function pushCue(e, start, end, text, top){
@@ -1598,7 +1613,7 @@ function pushCue(e, start, end, text, top){
   if (end == null || end <= start) end = start + 4;
   try {
     const c = new VTTCue(start + e.offset, end + e.offset, text);
-    if (top) { c.line = 0; c.top = true; } else if (subsLifted) c.line = -4;
+    if (top) { c.line = 0; c.top = true; }
     e.tt.addCue(c); e.count++;
     if (end === start + 4) e.lastOpen = c;
   } catch {}
@@ -1608,24 +1623,27 @@ function resetSubs(){
   subs.forEach(s => { if (!s.tt) return; s.tt.mode = "disabled"; const c = s.tt.cues; if (c) while (c.length) s.tt.removeCue(c[c.length - 1]); });
   subs = []; activeSub = -1; lastSub = -1;
   $("#ccBtn").classList.remove("on");
+  if (N && N.subStopAll) { N.subStopAll(); subJobs.clear(); }
+  bindCueTrack(null); clearPgs(); pgsShown = -2;
 }
 function selectSub(i){
-  activeSub = i >= 0 && subs[i] && subs[i].tt ? i : -1;
-  subs.forEach((s, j) => { if (s.tt) s.tt.mode = j === activeSub ? "showing" : "disabled"; });
-  if (activeSub >= 0) lastSub = activeSub;
+  activeSub = i >= 0 && usable(subs[i]) ? i : -1;
+  const pip = !!document.pictureInPictureElement;
+  subs.forEach((s, j) => { if (s.tt) s.tt.mode = j === activeSub ? (pip ? "showing" : "hidden") : "disabled"; });
+  if (activeSub >= 0) { lastSub = activeSub; ensureSubLoaded(subs[activeSub]); }
   $("#ccBtn").classList.toggle("on", activeSub >= 0);
-  liftSubs(!!subsLifted, true);
+  bindCueTrack(subs[activeSub]); pgsKick();
   renderMenuIfOpen();
 }
 function toggleSubs(){
   if (!cur) return;
-  if (!subs.some(s => s.tt)) { openMenu("subs"); return; }
+  if (!subs.some(usable)) { openMenu("subs"); return; }
   if (activeSub >= 0) { selectSub(-1); osd("Subtitles off"); return; }
-  const i = lastSub >= 0 && subs[lastSub] && subs[lastSub].tt ? lastSub : subs.findIndex(s => s.tt);
+  const i = lastSub >= 0 && usable(subs[lastSub]) ? lastSub : subs.findIndex(usable);
   selectSub(i); osd("Subtitles: " + subs[i].label);
 }
 function cycleSub(){
-  const idx = subs.map((s, i) => s.tt ? i : -1).filter(i => i >= 0);
+  const idx = subs.map((s, i) => usable(s) ? i : -1).filter(i => i >= 0);
   if (!idx.length) { osd("No subtitles"); return; }
   const p = idx.indexOf(activeSub), next = p === idx.length - 1 ? -1 : idx[p + 1];
   selectSub(next); osd(next < 0 ? "Subtitles off" : "Subtitles: " + subs[next].label);
@@ -1634,7 +1652,8 @@ const fmtOff = o => (o > 0 ? "+" : o < 0 ? "−" : "") + Math.abs(o).toFixed(1) 
 function shiftSub(d){
   const e = subs[activeSub]; if (!e) { osd("Turn subtitles on first"); return; }
   e.offset = Math.round((e.offset + d) * 10) / 10;
-  const c = e.tt.cues; if (c) for (let i = 0; i < c.length; i++) { c[i].startTime = Math.max(0, c[i].startTime + d); c[i].endTime = Math.max(.1, c[i].endTime + d); }
+  const c = e.tt ? e.tt.cues : null; if (c) for (let i = 0; i < c.length; i++) { c[i].startTime = Math.max(0, c[i].startTime + d); c[i].endTime = Math.max(.1, c[i].endTime + d); }
+  renderCues(); pgsKick();
   osd("Subtitle delay " + fmtOff(e.offset)); renderMenuIfOpen();
 }
 async function addSubFile(f){
@@ -1648,8 +1667,9 @@ async function addSubFile(f){
   selectSub(subs.indexOf(e)); toast(`Subtitles on: ${f.name} (${cues.length} lines)`); renderRailIfInfo();
 }
 function pickSub(list){
-  const ul = (navigator.language || "en").slice(0, 2).toLowerCase();
-  return list.find(e => !e.forced && langCode(e.lang) === ul) || list.find(e => !e.forced && e.def) || list.find(e => !e.forced) || list[0];
+  const ul = (navigator.language || "en").slice(0, 2).toLowerCase(), en = e => langCode(e.lang) === "en";
+  return list.find(e => !e.forced && en(e) && e.kind === "text" && !e.sdh) || list.find(e => !e.forced && en(e))
+    || list.find(e => !e.forced && langCode(e.lang) === ul) || list.find(e => !e.forced && e.def) || list.find(e => !e.forced) || list[0];
 }
 
 /* ================= look inside local files ================= */
@@ -1669,7 +1689,9 @@ async function inspectFile(file){
   P.video.forEach(t => { t.cname = VCODEC(t.codec); t.supported = videoSupported(t.codec); });
   P.audio.forEach(t => { t.cname = acodecName(t.codec); t.supported = audioSupported(t.codec); });
   $("#audioBtn").hidden = !(P.audio.length > 1 || (P.audio[0] && !P.audio[0].supported));
-  if (P.audio[0] && !P.audio[0].supported) audioProblem(P.audio[0]);
+  const enIdx = pickAudio(P.audio);
+  if (enIdx !== 0 && P.audio[enIdx]) showBanner({ id: "lang", text: `This file starts with ${langName(P.audio[0].lang) || "another language"} audio. Switch to ${trackLabel(P.audio[enIdx], enIdx)}?`, actions: [{ label: "Switch", primary: true, fn: () => { hideBanner("lang"); convertAudio(enIdx); } }, { label: "Keep", fn: () => hideBanner("lang") }] });
+  else if (P.audio[0] && !P.audio[0].supported) audioProblem(P.audio[0]);
   const vt = P.video[0];
   if (vt && !vt.supported) showBanner({ id: "video", bad: true, text: `This file's video is ${vt.cname}, which this browser can't decode, so the picture may stay black. ` +
     (/HEVC/.test(vt.cname) ? "Microsoft Edge and Safari can play it using your device's HEVC support." : "Convert it to H.264 MP4 (HandBrake does this for free) to watch it here."),
@@ -1677,15 +1699,15 @@ async function inspectFile(file){
 
   const textSubs = [];
   P.subs.forEach(t => {
-    const kind = isTextSub(t.codec) ? "text" : "image";
+    const kind = isTextSub(t.codec) ? "text" : t.codec === "S_HDMV/PGS" ? "pgs" : "image";
     const ln = langName(t.lang);
     const label = [ln || "Unknown language", t.name && t.name !== ln ? t.name : "", t.forced ? "Forced" : ""].filter(Boolean).join(" · ");
     const e = makeSubEntry({ label, lang: t.lang, codec: SCODEC[t.codec] || t.codec, source: "embedded", kind, forced: t.forced, def: t.def, track: t });
-    if (kind === "text") textSubs.push(e);
+    if (kind !== "image") textSubs.push(e);
   });
   if (P.subs.length) {
     const img = P.subs.length - textSubs.length;
-    toast(`Found ${P.subs.length} built-in subtitle track${P.subs.length > 1 ? "s" : ""}` + (img ? ` (${img} picture-based, which browsers can't show)` : ""));
+    toast(`Found ${P.subs.length} built-in subtitle track${P.subs.length > 1 ? "s" : ""}` + (img ? ` (${img} in a picture format Crave can't show yet)` : ""));
   }
   if (textSubs.length && S.autoSubs && activeSub < 0) { const pick = pickSub(textSubs); selectSub(subs.indexOf(pick)); }
   renderMenuIfOpen(); renderRailIfInfo();
@@ -1693,7 +1715,7 @@ async function inspectFile(file){
   const onProg = p => { textSubs.forEach(e => { if (e.status === "loading") e.progress = p; }); renderMenuIfOpen(); };
   try {
     if (P.container === "mkv") await extractMkvSubs(file, P, textSubs, onProg, j);
-    else for (const e of textSubs) { await extractMp4Sub(file, P, e, onProg, j); if (!j.dead) e.status = e.count ? "ready" : "empty"; }
+    else for (const e of textSubs) { if (e.tt) await extractMp4Sub(file, P, e, onProg, j); if (!j.dead) e.status = e.count ? "ready" : "empty"; }
   } catch (err) { console.warn("Crave: subtitle read failed", err); textSubs.forEach(e => { if (e.status === "loading") e.status = "error"; }); }
   if (j.dead) return;
   textSubs.forEach(e => { e.lastOpen = null; if (e.status === "loading") e.status = e.count ? "ready" : "empty"; });
@@ -1713,7 +1735,9 @@ function nativeInput(){
 }
 function canFix(){ return !!nativeInput() || !!(cur && cur.kind === "file" && cur.file instanceof Blob && !/\.torrent$/i.test(cur.file.name)); }
 function audioProblem(t){
-  if (bannerShown("audio") || ext) return;
+  if (ext) return;
+  if (N && nativeInput() && startLive(cur.audioIdx || 0)) return; // desktop: just play it
+  if (bannerShown("audio")) return;
   const name = t ? t.cname : "";
   showBanner({ id: "audio", text: name ? `No sound? This file's audio is ${name}, which this browser can't play. Crave can convert it so you can hear it.` : "No sound is coming through. The audio uses a format this browser can't decode. Crave can convert it.",
     actions: [{ label: "Fix audio", primary: true, fn: () => convertAudio(0) }, { label: "Dismiss", fn: () => hideBanner("audio") }] });
@@ -1848,20 +1872,371 @@ function attachExt(url, ai){
 }
 function detachExt(quiet){
   if (!ext) return;
+  if (ext.live) { try { N.astreamStop(); } catch {} setTimeout(u => URL.revokeObjectURL(u), 0, ext.url); }
   ext.a.pause(); ext.a.removeAttribute("src"); try { ext.a.load(); } catch {}
   ext = null; if (!quiet) { applyVol(); renderMenuIfOpen(); }
 }
 // keep the converted audio locked to the picture
-v.addEventListener("play", () => { if (ext) { ext.a.currentTime = v.currentTime; ext.a.play().catch(() => {}); } });
+const extTo = t => { if (!ext) return; if (ext.live) ext.seek(t); else ext.a.currentTime = t; };
+v.addEventListener("play", () => { if (ext) { extTo(v.currentTime); ext.a.play().catch(() => {}); } });
 v.addEventListener("playing", () => {
-  if (ext) { ext.a.currentTime = v.currentTime; ext.a.play().catch(() => {}); }
+  if (ext) { extTo(v.currentTime); ext.a.play().catch(() => {}); }
   clearTimeout(audioCheckT); const me = cur; audioCheckT = setTimeout(() => checkAudio(me), 3500);
 });
 v.addEventListener("pause", () => { if (ext) ext.a.pause(); });
 v.addEventListener("waiting", () => { if (ext) ext.a.pause(); });
-v.addEventListener("seeking", () => { if (ext) ext.a.currentTime = v.currentTime; });
+v.addEventListener("seeking", () => extTo(v.currentTime));
 v.addEventListener("ratechange", () => { if (ext) ext.a.playbackRate = v.playbackRate; });
-v.addEventListener("timeupdate", () => { if (ext && !v.paused && ext.a.readyState > 1 && Math.abs(ext.a.currentTime - v.currentTime) > .25) ext.a.currentTime = v.currentTime; });
+v.addEventListener("timeupdate", () => {
+  if (!ext || v.paused) return;
+  if (ext.live) { ext.flow(); if (Math.abs(ext.a.currentTime - v.currentTime) > .3) ext.seek(v.currentTime); else if (ext.a.paused && ext.a.readyState > 2) ext.a.play().catch(() => {}); }
+  else if (ext.a.readyState > 1 && Math.abs(ext.a.currentTime - v.currentTime) > .25) ext.a.currentTime = v.currentTime;
+});
+
+/* ================= subtitles on screen: Netflix-style text and PGS pictures ================= */
+const subsBottom = $("#subsBottom"), subsTop = $("#subsTop"), pgsCanvas = $("#pgsLayer");
+const usable = s => !!(s && (s.tt || s.pgs));
+const chLabel = t => t.layout || chName(t.channels);
+let cueTrack = null;
+let pgsRAF = 0, pgsShown = -2, pgsSize = "";
+function cueHTML(t){
+  const raw = String(t).replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
+  return esc(raw).replace(/&lt;(\/?)([ibu])&gt;/g, "<$1$2>").replace(/\n/g, "<br>");
+}
+function renderCues(){
+  const e = subs[activeSub];
+  let bottom = "", top = "";
+  if (e && e.tt && e.tt.activeCues) {
+    for (const c of [...e.tt.activeCues].sort((a, b) => a.startTime - b.startTime)) {
+      const h = `<div class="sub-line">${cueHTML(c.text)}</div>`;
+      if (c.top) top += h; else bottom += h;
+    }
+  }
+  if (subsBottom.innerHTML !== bottom) subsBottom.innerHTML = bottom;
+  if (subsTop.innerHTML !== top) subsTop.innerHTML = top;
+}
+function bindCueTrack(e){
+  if (cueTrack) cueTrack.oncuechange = null;
+  cueTrack = e && e.tt ? e.tt : null;
+  if (cueTrack) cueTrack.oncuechange = renderCues;
+  renderCues();
+}
+// Picture-in-picture can't show page elements, so the browser draws the cues there.
+v.addEventListener("enterpictureinpicture", () => { const e = subs[activeSub]; if (e && e.tt) e.tt.mode = "showing"; });
+v.addEventListener("leavepictureinpicture", () => { const e = subs[activeSub]; if (e && e.tt) e.tt.mode = "hidden"; });
+
+const SUB_SCALE = { small: 0.82, medium: 1, large: 1.22 };
+function sizeSubs(){ stage.style.setProperty("--sub-size", Math.max(13, Math.round(stage.clientHeight * 0.052 * (SUB_SCALE[S.subSize] || 1))) + "px"); pgsShown = -2; }
+try { new ResizeObserver(sizeSubs).observe(stage); } catch { sizeSubs(); }
+
+/* ---- PGS (Blu-ray picture subtitles) ---- */
+class PgsParser {
+  constructor(store){ this.store = store; this.buf = new Uint8Array(0); this.pal = {}; this.obj = {}; this.pcs = null; }
+  // Raw .sup stream: "PG" + pts + dts + type + size + payload, repeated.
+  feedSup(chunk){
+    const c = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
+    const b = new Uint8Array(this.buf.length + c.length); b.set(this.buf); b.set(c, this.buf.length);
+    let i = 0;
+    while (i + 13 <= b.length) {
+      if (b[i] !== 0x50 || b[i + 1] !== 0x47) { i++; continue; }
+      const size = (b[i + 11] << 8) | b[i + 12];
+      if (i + 13 + size > b.length) break;
+      const pts = ((b[i + 2] << 24 >>> 0) + (b[i + 3] << 16) + (b[i + 4] << 8) + b[i + 5]) / 90000;
+      this.segment(b[i + 10], b.subarray(i + 13, i + 13 + size), pts);
+      i += 13 + size;
+    }
+    this.buf = b.slice(i);
+  }
+  // One Matroska block: the same segments without the "PG" headers; timing comes from the block.
+  feedBlock(bytes, pts){
+    let i = 0;
+    while (i + 3 <= bytes.length) { const t = bytes[i], sz = (bytes[i + 1] << 8) | bytes[i + 2]; this.segment(t, bytes.subarray(i + 3, i + 3 + sz), pts); i += 3 + sz; }
+  }
+  segment(type, p, pts){
+    if (type === 0x16) { // presentation composition
+      const w = (p[0] << 8) | p[1], h = (p[2] << 8) | p[3], state = p[7], palId = p[9], n = p[10], objs = [];
+      let o = 11;
+      for (let k = 0; k < n && o + 8 <= p.length; k++) { objs.push({ id: (p[o] << 8) | p[o + 1], x: (p[o + 4] << 8) | p[o + 5], y: (p[o + 6] << 8) | p[o + 7] }); o += (p[o + 3] & 0x80) ? 16 : 8; }
+      if (state & 0x80) { this.obj = {}; this.pal = {}; }
+      this.pcs = { pts, w, h, palId, objs };
+    } else if (type === 0x14) { // palette
+      const id = p[0], prev = this.pal[id], pal = prev ? prev.slice() : new Uint8ClampedArray(1024);
+      for (let o = 2; o + 5 <= p.length; o += 5) {
+        const e = p[o] * 4, y = 1.164 * (p[o + 1] - 16), cr = p[o + 2] - 128, cb = p[o + 3] - 128;
+        pal[e] = y + 1.793 * cr; pal[e + 1] = y - 0.213 * cb - 0.533 * cr; pal[e + 2] = y + 2.112 * cb; pal[e + 3] = p[o + 4];
+      }
+      this.pal[id] = pal;
+    } else if (type === 0x15) { // object (bitmap), possibly split across segments
+      const id = (p[0] << 8) | p[1], seq = p[3];
+      if (seq & 0x80) this.obj[id] = { w: (p[7] << 8) | p[8], h: (p[9] << 8) | p[10], parts: [p.slice(11)], data: null };
+      else if (this.obj[id]) { this.obj[id].parts.push(p.slice(4)); this.obj[id].data = null; }
+    } else if (type === 0x80 && this.pcs) { // end of display set
+      const c = this.pcs; this.pcs = null;
+      const pal = this.pal[c.palId];
+      const items = c.objs.map(o => {
+        const ob = this.obj[o.id]; if (!ob || !pal) return null;
+        if (!ob.data) { const len = ob.parts.reduce((s, x) => s + x.length, 0), d = new Uint8Array(len); let k = 0; for (const x of ob.parts) { d.set(x, k); k += x.length; } ob.data = d; }
+        return { x: o.x, y: o.y, w: ob.w, h: ob.h, data: ob.data, pal };
+      }).filter(Boolean);
+      this.store(c.pts, c.w, c.h, items);
+    }
+  }
+}
+function pgsStore(e, pts, w, h, items){
+  const D = e.pgs.displays;
+  let lo = 0, hi = D.length;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (D[m].pts < pts) lo = m + 1; else hi = m; }
+  const d = { pts, w, h, items };
+  if (D[lo] && Math.abs(D[lo].pts - pts) < 0.002) D[lo] = d; else D.splice(lo, 0, d);
+  e.count = D.reduce((n, x) => n + (x.items.length ? 1 : 0), 0);
+  if (subs[activeSub] === e) pgsShown = -2;
+}
+const pgsCache = [];
+function pgsBitmap(it){
+  if (it.canvas) return it.canvas;
+  const img = new ImageData(it.w, it.h), out = img.data, d = it.data, pal = it.pal;
+  let i = 0, x = 0, y = 0;
+  const put = (c, n) => { const p = c * 4; for (let k = 0; k < n && x < it.w; k++, x++) { const o = (y * it.w + x) * 4; out[o] = pal[p]; out[o + 1] = pal[p + 1]; out[o + 2] = pal[p + 2]; out[o + 3] = pal[p + 3]; } };
+  while (i < d.length && y < it.h) {
+    const b = d[i++];
+    if (b) { put(b, 1); continue; }
+    const b2 = d[i++];
+    if (b2 === 0) { x = 0; y++; continue; }
+    let n = b2 & 0x3F, c = 0;
+    if (b2 & 0x40) n = (n << 8) | d[i++];
+    if (b2 & 0x80) c = d[i++];
+    put(c, n);
+  }
+  const cv = document.createElement("canvas"); cv.width = it.w; cv.height = it.h;
+  cv.getContext("2d").putImageData(img, 0, 0);
+  it.canvas = cv; pgsCache.push(it);
+  while (pgsCache.length > 12) { const old = pgsCache.shift(); old.canvas = null; }
+  return cv;
+}
+function clearPgs(){ const ctx = pgsCanvas.getContext("2d"); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, pgsCanvas.width, pgsCanvas.height); }
+function drawPgs(){
+  const e = subs[activeSub], D = e && e.pgs && e.pgs.displays;
+  if (!D) { if (pgsShown !== -1) { clearPgs(); pgsShown = -1; } return; }
+  const t = v.currentTime - (e.offset || 0);
+  let lo = 0, hi = D.length - 1, idx = -1;
+  while (lo <= hi) { const m = (lo + hi) >> 1; if (D[m].pts <= t + 0.001) { idx = m; lo = m + 1; } else hi = m - 1; }
+  const W = stage.clientWidth, H = stage.clientHeight, size = W + "x" + H + "x" + v.videoWidth;
+  if (idx === pgsShown && size === pgsSize) return;
+  pgsShown = idx; pgsSize = size;
+  const dpr = window.devicePixelRatio || 1;
+  if (pgsCanvas.width !== Math.round(W * dpr) || pgsCanvas.height !== Math.round(H * dpr)) { pgsCanvas.width = Math.round(W * dpr); pgsCanvas.height = Math.round(H * dpr); }
+  clearPgs();
+  const d = D[idx]; if (!d || !d.items.length) return;
+  const vw = v.videoWidth || d.w, vh = v.videoHeight || d.h, s = Math.min(W / vw, H / vh);
+  const cw = vw * s, ch = vh * s, ox = (W - cw) / 2, oy = (H - ch) / 2, sx = cw / d.w, sy = ch / d.h;
+  const ctx = pgsCanvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.imageSmoothingQuality = "high";
+  for (const it of d.items) ctx.drawImage(pgsBitmap(it), ox + it.x * sx, oy + it.y * sy, it.w * sx, it.h * sy);
+}
+function pgsTick(){ pgsRAF = 0; const e = subs[activeSub]; drawPgs(); if (e && e.pgs) pgsRAF = requestAnimationFrame(pgsTick); }
+function pgsKick(){ pgsShown = -2; if (!pgsRAF) pgsRAF = requestAnimationFrame(pgsTick); }
+
+/* ---- subtitle tracks read live by the desktop app (from the play position first) ---- */
+let subSeq = 0;
+const subJobs = new Map();
+if (N && N.onSubData) {
+  N.onSubData((id, d) => { const j = subJobs.get(id); if (j) j.data(d); });
+  N.onSubEnd((id, code, msg) => { const j = subJobs.get(id); if (j) { subJobs.delete(id); j.end(code, msg); } });
+}
+function subPass(opts, onData){ return new Promise(res => { const id = ++subSeq; subJobs.set(id, { data: onData, end: (code, msg) => res({ code, msg }) }); N.subStart({ id, ...opts }); }); }
+function ensureSubLoaded(e){ if (e && e.native && !e.started) loadSubNative(e); }
+async function loadSubNative(e){
+  e.started = true; e.status = "loading"; renderMenuIfOpen();
+  const me = cur, inp = nativeInput(); if (!inp) return;
+  const here = Math.max(0, (v.currentTime || 0) - 15);
+  const passes = here > 20 ? [{ start: here, dur: 0 }, { start: 0, dur: here + 20 }] : [{ start: 0, dur: 0 }];
+  const seen = new Set();
+  const take = list => { for (const c of list) { const k = c.s.toFixed(2) + "|" + c.text; if (seen.has(k)) continue; seen.add(k); pushCue(e, c.s, c.e, c.text, c.top); } };
+  let failed = null;
+  for (const ps of passes) {
+    if (cur !== me) return;
+    let rest = "", lastPaint = 0;
+    const dec = new TextDecoder(), pgs = e.pgs ? e.pgs.parser : null;
+    const r = await subPass({ input: inp, track: e.si, start: ps.start, dur: ps.dur, format: pgs ? "sup" : "webvtt" }, chunk => {
+      if (cur !== me) return;
+      if (pgs) { pgs.feedSup(chunk); if (subs[activeSub] === e) pgsKick(); }
+      else {
+        rest += dec.decode(chunk, { stream: true });
+        const cut = rest.lastIndexOf("\n\n"); if (cut < 0) return;
+        take(parseSrtVtt(rest.slice(0, cut))); rest = rest.slice(cut + 2);
+        if (subs[activeSub] === e) renderCues();
+      }
+      if (performance.now() - lastPaint > 400) { lastPaint = performance.now(); renderMenuIfOpen(); }
+    });
+    if (cur !== me) return;
+    if (!pgs && rest.trim()) take(parseSrtVtt(rest + "\n\n"));
+    if (r.code !== 0 && r.code !== null) failed = r.msg || "ffmpeg error";
+  }
+  e.lastOpen = null;
+  e.status = e.count ? "ready" : failed ? "error" : "empty";
+  if (subs[activeSub] === e) { renderCues(); pgsKick(); }
+  renderMenuIfOpen(); renderRailIfInfo();
+}
+
+/* ---- subtitle font: Netflix Sans when available ---- */
+function fontInstalled(name){
+  try {
+    const c = document.createElement("canvas").getContext("2d"), s = "mmmmmmmmmmlli1WQ@#&%";
+    return ["monospace", "serif"].some(base => { c.font = `72px ${base}`; const a = c.measureText(s).width; c.font = `72px "${name}", ${base}`; return c.measureText(s).width !== a; });
+  } catch { return false; }
+}
+function dropCustomFont(){ document.fonts.forEach(f => { if (f.family.replace(/["']/g, "") === "CraveSubFont") document.fonts.delete(f); }); }
+async function applySubFont(){
+  const st = $("#subFontText"), reset = $("#subFontReset");
+  let saved = null; try { saved = JSON.parse(localStorage.getItem("crave:subfont") || "null"); } catch {}
+  dropCustomFont();
+  if (saved && saved.data) {
+    try {
+      const bytes = Uint8Array.from(atob(saved.data), ch => ch.charCodeAt(0));
+      const ff = new FontFace("CraveSubFont", bytes); await ff.load(); document.fonts.add(ff);
+      st.textContent = `Using ${saved.name}.`; reset.hidden = false; renderCues(); return;
+    } catch { st.textContent = "The font you added couldn't be loaded. Add it again."; }
+  }
+  reset.hidden = true;
+  st.textContent = fontInstalled("Netflix Sans")
+    ? "Using Netflix Sans from this computer."
+    : "Netflix Sans isn't installed on this computer, so subtitles use Figtree, a similar free font. Add the Netflix Sans font file (.ttf, .otf or .woff2) to use it.";
+  renderCues();
+}
+$("#subFontBtn").onclick = () => $("#subFontInput").click();
+$("#subFontInput").onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  try {
+    const u8 = new Uint8Array(await f.arrayBuffer());
+    await new FontFace("CraveSubFontTest", u8).load();
+    let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+    localStorage.setItem("crave:subfont", JSON.stringify({ name: f.name.replace(/\.[^.]+$/, ""), data: btoa(s) }));
+    await applySubFont(); toast("Subtitle font set to " + f.name);
+  } catch (err) {
+    toast(/quota/i.test(String(err && err.name)) ? "That font file is too large to keep. Try the .woff2 version." : "That file isn't a font Crave can use. Pick a .ttf, .otf or .woff2 file.", true);
+  }
+};
+$("#subFontReset").onclick = () => { try { localStorage.removeItem("crave:subfont"); } catch {} applySubFont(); toast("Subtitle font reset"); };
+$("#setSubSize").value = S.subSize || "medium";
+$("#setSubSize").onchange = e => { S.subSize = e.target.value; saveSettings(); sizeSubs(); };
+applySubFont();
+
+/* ================= audio: English first, any format plays instantly ================= */
+const FF_A = { ac3: "Dolby Digital (AC-3)", eac3: "Dolby Digital Plus (E-AC-3)", truehd: "Dolby TrueHD", dts: "DTS", mlp: "MLP", aac: "AAC", mp3: "MP3", mp2: "MP2", opus: "Opus", vorbis: "Vorbis", flac: "FLAC", alac: "ALAC", wmav1: "WMA", wmav2: "WMA", wmapro: "WMA Pro", amr_nb: "AMR", pcm_s16le: "PCM", pcm_s24le: "PCM", pcm_bluray: "LPCM", pcm_dvd: "LPCM" };
+const SAFE_A = new Set(["aac", "mp3", "opus", "vorbis", "flac"]);
+const FF_S = { subrip: "SRT", ass: "ASS", ssa: "SSA", mov_text: "MP4 text", webvtt: "WebVTT", hdmv_pgs_subtitle: "PGS", dvd_subtitle: "VobSub", dvb_subtitle: "DVB", dvb_teletext: "Teletext", text: "Text", microdvd: "MicroDVD", sami: "SAMI" };
+const FF_IMAGE_UNSUPPORTED = /^(dvd_subtitle|dvb_subtitle|dvb_teletext|xsub)$/;
+const FF_V = c => /hevc/.test(c) ? "HEVC (H.265)" : c === "h264" ? "H.264" : c === "av1" ? "AV1" : c === "vp9" ? "VP9" : c === "vp8" ? "VP8" : /mpeg2/.test(c) ? "MPEG-2" : /mpeg4|msmpeg4/.test(c) ? "MPEG-4 Part 2 (Xvid / DivX)" : /vc1|wmv/.test(c) ? "VC-1 / WMV" : c;
+const ffVideoOK = c => c === "h264" || c === "vp8" || c === "vp9" || c === "theora" || (c === "av1" && can('video/mp4; codecs="av01.0.05M.08"')) || (c === "hevc" && (can('video/mp4; codecs="hvc1.1.6.L93.B0"') || can('video/mp4; codecs="hev1.1.6.L93.B0"')));
+function pickAudio(A){
+  if (!A || !A.length) return 0;
+  const en = t => langCode(t.lang) === "en";
+  const extra = t => /comment|descri|\bad\b|narrat|isolated|karaoke|music only/i.test((t.name || t.title || ""));
+  let i = A.findIndex(t => en(t) && !extra(t));
+  if (i < 0) i = A.findIndex(en);
+  if (i < 0) i = A.findIndex(t => t.def && !extra(t));
+  return i < 0 ? 0 : i;
+}
+
+let liveSeq = 0;
+// Plays one audio track through the bundled ffmpeg, converted as it plays, kept in step with the picture.
+function startLive(ai){
+  const inp = nativeInput();
+  if (!inp || !window.MediaSource || !N.astreamStart) return false;
+  detachExt(true);
+  const a = new Audio(), ms = new MediaSource();
+  const L = { a, ai, live: true, sb: null, q: [], id: 0, held: false, offset: null, url: URL.createObjectURL(ms), lastRestart: 0, restartAt: -1 };
+  a.preload = "auto"; a.src = L.url; a.playbackRate = v.playbackRate;
+  L.ahead = () => { const t = a.currentTime, b = a.buffered; for (let i = 0; i < b.length; i++) if (b.start(i) <= t + 0.3 && b.end(i) >= t) return b.end(i) - t; return 0; };
+  L.has = t => { const b = a.buffered; for (let i = 0; i < b.length; i++) if (b.start(i) <= t + 0.05 && b.end(i) > t + 1) return true; return false; };
+  L.evict = force => {
+    const sb = L.sb; if (!sb || sb.updating) return false;
+    const t = a.currentTime, b = a.buffered; if (!b.length) return false;
+    const lo = b.start(0), keepBack = force ? 10 : 90;
+    if (t - keepBack > lo + 5) { try { sb.remove(lo, t - keepBack); return true; } catch {} }
+    if (force) { const hi = b.end(b.length - 1); if (hi > t + 60) { try { sb.remove(t + 60, hi); return true; } catch {} } }
+    return false;
+  };
+  L.flow = () => {
+    const ah = L.ahead();
+    if (!L.held && ah > 120) { L.held = true; N.astreamPause(L.id); }
+    else if (L.held && ah < 50) { L.held = false; N.astreamResume(L.id); }
+  };
+  L.pump = () => {
+    const sb = L.sb; if (!sb || sb.updating) return;
+    if (L.offset != null) { try { sb.timestampOffset = L.offset; } catch {} L.offset = null; }
+    if (L.q.length) {
+      const c = L.q.shift();
+      try { sb.appendBuffer(c); }
+      catch (err) { if (err.name === "QuotaExceededError") { L.q.unshift(c); L.evict(true); } }
+      return;
+    }
+    if (!L.evict(false)) L.flow();
+  };
+  L.restart = t => {
+    L.id = ++liveSeq; L.q = []; L.held = false; L.lastRestart = performance.now(); L.restartAt = t;
+    if (L.sb) { try { L.sb.abort(); } catch {} }
+    L.offset = t; L.pump();
+    N.astreamStart({ id: L.id, input: inp, track: ai, start: t });
+  };
+  L.seek = t => {
+    if (L.has(t)) { a.currentTime = t; return; }
+    const recent = performance.now() - L.lastRestart < 1500 && Math.abs(L.restartAt - t) < 3;
+    if (!recent) L.restart(t);
+    a.currentTime = t;
+  };
+  ms.addEventListener("sourceopen", () => {
+    try { L.sb = ms.addSourceBuffer('audio/mp4; codecs="mp4a.40.2"'); } catch { return; }
+    L.sb.mode = "segments";
+    L.sb.addEventListener("updateend", L.pump);
+    const t = Math.max(0, v.currentTime || 0);
+    L.restart(t); a.currentTime = t;
+    if (!v.paused) a.play().catch(() => {});
+  }, { once: true });
+  ext = L; applyVol(); if (cur) cur.audioIdx = ai;
+  hideBanner("audio"); renderMenuIfOpen(); renderRailIfInfo();
+  return true;
+}
+if (N && N.onAstreamData) {
+  N.onAstreamData((id, d) => { if (ext && ext.live && id === ext.id) { ext.q.push(d instanceof Uint8Array ? d : new Uint8Array(d)); ext.pump(); } });
+  N.onAstreamEnd((id, code, msg) => {
+    if (ext && ext.live && id === ext.id && code && code > 0) showBanner({ id: "audio", bad: true, text: "This audio track couldn't be played (" + (msg || "ffmpeg error") + ").", actions: [{ label: "Dismiss", fn: () => hideBanner("audio") }] });
+  });
+}
+
+/* ---- reading tracks with the desktop app's ffmpeg (files, links, torrents) ---- */
+async function inspectNative(){
+  const me = cur, inp = nativeInput(); if (!inp) return;
+  cur.probing = true; renderMenuIfOpen();
+  let R = null; try { R = await N.probe(inp); } catch {}
+  if (cur !== me) return;
+  cur.probing = false;
+  if (!R) { renderMenuIfOpen(); return; }
+  const P = {
+    container: "native",
+    video: R.video.map(t => ({ codec: t.codec, cname: FF_V(t.codec), supported: ffVideoOK(t.codec) })),
+    audio: R.audio.map(t => ({ codec: t.codec, cname: FF_A[t.codec] || t.codec.toUpperCase(), supported: SAFE_A.has(t.codec), lang: t.lang, name: t.title, def: t.def, channels: 0, layout: t.layout })),
+    subs: []
+  };
+  cur.probe = P;
+  const ai = pickAudio(P.audio);
+  cur.audioIdx = ai;
+  $("#audioBtn").hidden = P.audio.length < 2;
+  if (P.audio.length && (ai !== 0 || !P.audio[0].supported) && !ext) startLive(ai);
+  const vt = P.video[0];
+  if (vt && !vt.supported) showBanner({ id: "video", bad: true, text: `This video is ${vt.cname}, which this computer can't decode, so the picture may stay black. ` + (/HEVC/.test(vt.cname) ? "Installing Microsoft's free \"HEVC Video Extensions\" usually fixes this." : "Converting it to H.264 MP4 (HandBrake does this for free) will make it play."), actions: [{ label: "Dismiss", fn: () => hideBanner("video") }] });
+  const list = [];
+  R.subs.forEach((t, si) => {
+    const ln = langName(t.lang);
+    const label = [ln || "Unknown language", t.title && t.title !== ln ? t.title : "", t.forced ? "Forced" : "", t.sdh ? "SDH" : ""].filter(Boolean).join(" · ");
+    const kind = t.codec === "hdmv_pgs_subtitle" ? "pgs" : FF_IMAGE_UNSUPPORTED.test(t.codec) ? "image" : "text";
+    const e = makeSubEntry({ label, lang: t.lang, codec: FF_S[t.codec] || t.codec, source: "embedded", kind, forced: t.forced, def: t.def, sdh: t.sdh, si, native: true });
+    if (kind !== "image") list.push(e);
+  });
+  if (R.subs.length) toast(`Found ${R.subs.length} built-in subtitle track${R.subs.length > 1 ? "s" : ""}`);
+  if (list.length && S.autoSubs && activeSub < 0) selectSub(subs.indexOf(pickSub(list)));
+  renderMenuIfOpen(); renderRailIfInfo();
+}
 
 /* ================= stage menus (subtitles / audio) ================= */
 let menuKind = null;
@@ -1873,11 +2248,12 @@ function renderMenu(){
   if (menuKind === "subs") {
     let h = `<h4>Subtitles</h4><button class="mi" data-sub="-1">${ck(activeSub < 0)}<span><span class="a">Off</span></span></button>`;
     subs.forEach((s, i) => {
-      const st = s.kind === "image" ? `${s.codec} · picture-based, browsers can't show these`
-        : s.status === "loading" ? `${s.codec} · reading ${Math.round(s.progress * 100)}% · ${s.count} lines so far`
+      const st = s.kind === "image" ? `${s.codec} · a picture format Crave can't show yet`
+        : s.status === "idle" ? `${s.codec} · loads instantly when picked`
+        : s.status === "loading" ? (s.native ? `${s.codec} · loading · ${s.count} lines so far` : `${s.codec} · reading ${Math.round(s.progress * 100)}% · ${s.count} lines so far`)
         : s.status === "empty" ? `${s.codec} · no lines found` : s.status === "error" ? `${s.codec} · couldn't be read`
         : `${s.codec} · ${s.count} lines${s.source === "file" ? " · from file" : ""}`;
-      h += `<button class="mi" data-sub="${i}" ${s.tt ? "" : "disabled"}>${ck(i === activeSub)}<span><span class="a">${esc(s.label)}</span><span class="b">${esc(st)}</span></span></button>`;
+      h += `<button class="mi" data-sub="${i}" ${usable(s) ? "" : "disabled"}>${ck(i === activeSub)}<span><span class="a">${esc(s.label)}</span><span class="b">${esc(st)}</span></span></button>`;
     });
     if (!subs.length) h += `<p class="note">${cur && cur.probing ? "Checking this file for built-in subtitles…" : cur && cur.kind === "file" ? "This file has no built-in subtitles." : "Built-in subtitles are read from files on your computer. For links, load a subtitle file."}</p>`;
     h += `<div class="sep"></div><button class="mi" data-act="load">${ck(false)}<span><span class="a">Load subtitle file…</span><span class="b">.srt, .vtt, .ass or .ssa</span></span></button>`;
@@ -1891,16 +2267,17 @@ function renderMenu(){
     let h = `<h4>Audio</h4>`;
     A.forEach((t, i) => {
       const ready = cur.extCache && cur.extCache[i];
-      const st = convJob && convJob.ai === i ? "Working on it…" : i === 0 && t.supported ? "Plays directly" : ready ? "Ready" : copyTarget(t.codec) ? "Tap to switch (quick)" : "Tap to convert (takes a few minutes)";
-      const on = i === curAi && (ext || t.supported);
-      h += `<button class="mi" data-ai="${i}">${ck(on)}<span><span class="a">${esc(trackLabel(t, i))}</span><span class="b">${esc([t.cname, chName(t.channels), st].filter(Boolean).join(" · "))}</span></span></button>`;
+      const on = i === curAi && (ext || t.supported), live = !!(N && nativeInput());
+      const st = on ? "Playing" : convJob && convJob.ai === i ? "Working on it…" : live ? "Switches instantly" : i === 0 && t.supported ? "Plays directly" : ready ? "Ready" : copyTarget(t.codec) ? "Tap to switch (quick)" : "Tap to convert (takes a few minutes)";
+      h += `<button class="mi" data-ai="${i}">${ck(on)}<span><span class="a">${esc(trackLabel(t, i))}</span><span class="b">${esc([t.cname, chLabel(t), st].filter(Boolean).join(" · "))}</span></span></button>`;
     });
     if (!A.length) h += `<p class="note">${canFix() ? "Crave couldn't list this file's audio tracks." : "Audio tracks can be switched for files opened from your computer."}</p>`;
     if (!A.length && canFix()) h += `<button class="mi" data-ai="0">${ck(!!ext)}<span><span class="a">Convert the audio</span><span class="b">Use this if a file plays without sound</span></span></button>`;
     m.innerHTML = h;
     m.querySelectorAll("[data-ai]").forEach(b => b.onclick = () => {
       const i = +b.dataset.ai, t = A[i];
-      if (t && i === 0 && t.supported) { detachExt(); toast("Using the original audio"); }
+      if (t && i === 0 && t.supported) { detachExt(); if (cur) cur.audioIdx = 0; toast("Switched to " + trackLabel(t, 0)); }
+      else if (N && nativeInput()) { if (startLive(i)) toast("Switched to " + trackLabel(t, i)); }
       else convertAudio(i);
       renderMenu();
     });
