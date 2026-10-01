@@ -24,5 +24,16 @@ contextBridge.exposeInMainWorld("craveNative", {
   checkForUpdates: () => ipcRenderer.invoke("update-check"),
   installUpdate: () => ipcRenderer.invoke("update-install"),
   openExternal: url => ipcRenderer.invoke("open-external", url),
-  onUpdate: cb => ipcRenderer.on("update", (_e, s) => cb(s))
+  onUpdate: cb => ipcRenderer.on("update", (_e, s) => cb(s)),
+  probe: input => ipcRenderer.invoke("probe", input),
+  astreamStart: opts => ipcRenderer.invoke("astream-start", opts),
+  astreamPause: id => ipcRenderer.invoke("astream-pause", id),
+  astreamResume: id => ipcRenderer.invoke("astream-resume", id),
+  astreamStop: () => ipcRenderer.invoke("astream-stop"),
+  onAstreamData: cb => ipcRenderer.on("astream-data", (_e, id, d) => cb(id, d)),
+  onAstreamEnd: cb => ipcRenderer.on("astream-end", (_e, id, code, msg) => cb(id, code, msg)),
+  subStart: opts => ipcRenderer.invoke("sub-start", opts),
+  subStopAll: () => ipcRenderer.invoke("sub-stop-all"),
+  onSubData: cb => ipcRenderer.on("sub-data", (_e, id, d) => cb(id, d)),
+  onSubEnd: cb => ipcRenderer.on("sub-end", (_e, id, code, msg) => cb(id, code, msg))
 });

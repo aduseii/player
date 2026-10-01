@@ -214,6 +214,77 @@ ipcMain.handle("torrent-stats", () => {
   return { numPeers: t.numPeers, downloadSpeed: t.downloadSpeed, progress: t.progress, length: t.length };
 });
 
+/* ---------- reading a source's tracks (works for files, links and torrents) ---------- */
+function parseProbe(text){
+  const res = { duration: 0, video: [], audio: [], subs: [] };
+  const dm = text.match(/Duration: (\d+):(\d+):([\d.]+)/);
+  if (dm) res.duration = +dm[1] * 3600 + +dm[2] * 60 + +dm[3];
+  let last = null;
+  for (const l of text.split(/\r?\n/)) {
+    const m = l.match(/^\s*Stream #0:(\d+)(?:\[[^\]]*\])?(?:\(([^)]+)\))?: (Video|Audio|Subtitle): ([^,\s]+)(.*)$/);
+    if (m) {
+      const s = { index: +m[1], lang: m[2] || "und", codec: m[4], title: "", def: /\(default\)/.test(l), forced: /\(forced\)/.test(l), sdh: /\(hearing impaired\)/.test(l) };
+      if (m[3] === "Audio") { const ch = l.match(/, (mono|stereo|2\.1|quad|5\.0|5\.1|6\.1|7\.1|\d+ channels)/); s.layout = ch ? ch[1] : ""; res.audio.push(s); }
+      else if (m[3] === "Video") { if (!/attached pic/.test(l)) res.video.push(s); }
+      else res.subs.push(s);
+      last = s; continue;
+    }
+    if (/^\s*Stream #/.test(l)) { last = null; continue; }
+    const t = l.match(/^\s{4,}title\s*:\s*(.+)$/);
+    if (t && last) last.title = t[1].trim();
+  }
+  return res;
+}
+ipcMain.handle("probe", (_e, input) => new Promise(resolve => {
+  const p = spawn(ffmpegPath(), ["-hide_banner", "-nostdin", "-i", input], { windowsHide: true });
+  let err = "";
+  const kill = setTimeout(() => { try { p.kill(); } catch {} }, 20000);
+  p.stderr.on("data", d => { err += d; });
+  p.on("error", () => { clearTimeout(kill); resolve(null); });
+  p.on("close", () => { clearTimeout(kill); const r = parseProbe(err); resolve(r.video.length || r.audio.length || r.subs.length ? r : null); });
+}));
+
+/* ---------- live audio: any codec, converted on the fly from the playback position ---------- */
+const astreams = new Map();
+function stopAstreams(){ for (const p of astreams.values()) { try { p.kill(); } catch {} } astreams.clear(); }
+ipcMain.handle("astream-start", (e, { id, input, track, start }) => {
+  stopAstreams();
+  const args = ["-hide_banner", "-nostdin", "-loglevel", "error"];
+  if (start > 0) args.push("-ss", start.toFixed(3));
+  args.push("-i", input, "-map", `0:a:${track}`, "-vn", "-sn", "-dn",
+    "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000",
+    "-f", "mp4", "-movflags", "+empty_moov+default_base_moof", "-frag_duration", "500000", "pipe:1");
+  const p = spawn(ffmpegPath(), args, { windowsHide: true });
+  astreams.set(id, p);
+  let err = "";
+  p.stderr.on("data", d => { err = (err + d).slice(-1500); });
+  p.stdout.on("data", d => { if (!e.sender.isDestroyed()) e.sender.send("astream-data", id, d); });
+  p.on("error", er => { if (!e.sender.isDestroyed()) e.sender.send("astream-end", id, -1, er.message); });
+  p.on("close", code => { astreams.delete(id); if (!e.sender.isDestroyed()) e.sender.send("astream-end", id, code, err.trim().split("\n").pop() || ""); });
+});
+ipcMain.handle("astream-pause", (_e, id) => { const p = astreams.get(id); if (p) p.stdout.pause(); });
+ipcMain.handle("astream-resume", (_e, id) => { const p = astreams.get(id); if (p) p.stdout.resume(); });
+ipcMain.handle("astream-stop", () => stopAstreams());
+
+/* ---------- live subtitles: text as WebVTT, picture subtitles (PGS) as raw .sup ---------- */
+const sstreams = new Map();
+ipcMain.handle("sub-start", (e, { id, input, track, start, dur, format }) => {
+  const args = ["-hide_banner", "-nostdin", "-loglevel", "error"];
+  if (start > 0) args.push("-ss", start.toFixed(3));
+  args.push("-copyts", "-i", input);
+  if (dur > 0) args.push("-t", dur.toFixed(3));
+  args.push("-map", `0:s:${track}`);
+  args.push(...(format === "sup" ? ["-c:s", "copy", "-f", "sup"] : ["-c:s", "webvtt", "-f", "webvtt"]), "pipe:1");
+  const p = spawn(ffmpegPath(), args, { windowsHide: true });
+  sstreams.set(id, p);
+  let err = "";
+  p.stderr.on("data", d => { err = (err + d).slice(-1500); });
+  p.stdout.on("data", d => { if (!e.sender.isDestroyed()) e.sender.send("sub-data", id, d); });
+  p.on("error", er => { if (!e.sender.isDestroyed()) e.sender.send("sub-end", id, -1, er.message); });
+  p.on("close", code => { sstreams.delete(id); if (!e.sender.isDestroyed()) e.sender.send("sub-end", id, code, err.trim().split("\n").pop() || ""); });
+});
+ipcMain.handle("sub-stop-all", () => { for (const p of sstreams.values()) { try { p.kill(); } catch {} } sstreams.clear(); });
+
 /* ---------- self-updating from GitHub Releases ---------- */
 const pkg = require("./package.json");
 const PORTABLE = !!process.env.PORTABLE_EXECUTABLE_DIR;
@@ -254,6 +325,7 @@ app.whenReady().then(initUpdater);
 /* ---------- shutdown ---------- */
 app.on("window-all-closed", () => app.quit());
 app.on("will-quit", () => {
+  try { stopAstreams(); for (const p of sstreams.values()) p.kill(); } catch {}
   try { if (ffProc) ffProc.kill(); } catch {}
   try { if (tclient) tclient.destroy(); } catch {}
   for (const h of fds.values()) h.close().catch(() => {});
