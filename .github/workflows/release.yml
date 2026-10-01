@@ -1,0 +1,73 @@
+# Builds the Windows installer on GitHub's machines and publishes it as a Release.
+# Installed copies of Crave watch this repository's Releases and update themselves.
+#
+# It runs whenever files change on the main branch. If package.json still has a version
+# that's already released, it stops early; raise "version" to publish an update.
+name: Build and release Crave
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check whether this version is new
+        id: ver
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(node -p "require('./package.json').version")
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          if gh release view "v$V" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Version $V is already released. Raise \"version\" in package.json to publish an update."
+          fi
+
+      - name: Install
+        if: steps.ver.outputs.skip != 'true'
+        run: npm ci
+
+      - name: Add ffmpeg
+        if: steps.ver.outputs.skip != 'true'
+        shell: bash
+        run: |
+          npm i --no-save --no-audit --no-fund ffmpeg-static@5.2.0
+          mkdir -p bin
+          cp node_modules/ffmpeg-static/ffmpeg.exe bin/ffmpeg.exe
+          cp node_modules/ffmpeg-static/ffmpeg.exe.LICENSE bin/ffmpeg.exe.LICENSE
+
+      - name: Point updates at this repository
+        if: steps.ver.outputs.skip != 'true'
+        shell: bash
+        run: |
+          node -e "const f='package.json',p=require('./'+f);p.craveReleasesUrl='https://github.com/'+process.env.GITHUB_REPOSITORY+'/releases/latest';require('fs').writeFileSync(f,JSON.stringify(p,null,2))"
+
+      - name: Build and publish v${{ steps.ver.outputs.version }}
+        if: steps.ver.outputs.skip != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/prepare.js
+          npx electron-builder --win --x64 --publish always \
+            -c.publish.provider=github \
+            -c.publish.owner="${GITHUB_REPOSITORY%/*}" \
+            -c.publish.repo="${GITHUB_REPOSITORY#*/}" \
+            -c.publish.releaseType=release
