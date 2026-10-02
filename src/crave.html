@@ -127,8 +127,8 @@ video::cue{font-family:var(--f-body);background:rgba(0,0,0,.6);font-size:clamp(1
 #subsTop{top:7%}
 .stage:not(.idle):not(.is-empty) #subsBottom{bottom:calc(7% + 64px)}
 .sub-line{font-family:var(--sub-font);font-weight:500;color:var(--sub-color,#fff);text-align:center;line-height:1.22;max-width:100%;overflow-wrap:anywhere;letter-spacing:.005em;text-shadow:var(--sub-shadow)}
-.sub-t{background:var(--sub-bg,transparent);padding:.04em .3em;border-radius:.12em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
-.sub-block .subs-layer:not(:empty){left:50%;right:auto;transform:translateX(-50%);width:max-content;max-width:88%;background:var(--sub-band-bg);padding:.14em .5em;border-radius:.22em}
+.sub-t{background:var(--sub-bg,transparent);padding:.04em .3em;border-radius:0;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.sub-block .subs-layer:not(:empty){left:50%;right:auto;transform:translateX(-50%);width:max-content;max-width:88%;background:var(--sub-band-bg);padding:.14em .5em;border-radius:0}
 .sub-preview.sub-block .subs-layer:not(:empty){transform:none;max-width:88%}
 .sub-preview{position:relative;height:150px;border-radius:12px;overflow:hidden;background:linear-gradient(160deg,#7fb3d5 0%,#e8d9b5 45%,#f4f1ea 55%,#2e4a3a 100%);display:flex;align-items:flex-end;justify-content:center;padding-bottom:16px}
 .sub-preview .subs-layer{position:static;font-size:22px}
@@ -2799,14 +2799,14 @@ async function drawSubsOnto(c){
     const widths = lines.map(l => l.reduce((s2, r) => s2 + r.w, 0));
     if (st.bg === "block" && a > 0) {
       const bw = Math.max(...widths) + px, bx = (W - bw) / 2, by = topY - px * 0.14, bh = lines.length * lh + px * 0.28;
-      ctx.fillStyle = rgba(st.bgColor, a); ctx.beginPath(); ctx.roundRect ? ctx.roundRect(bx, by, bw, bh, px * 0.22) : ctx.rect(bx, by, bw, bh); ctx.fill();
+      ctx.fillStyle = rgba(st.bgColor, a); ctx.beginPath(); ctx.rect(bx, by, bw, bh); ctx.fill();
     }
     lines.forEach((l, i) => {
       const y = topY + i * lh, x0 = (W - widths[i]) / 2;
       if (st.bg === "line" && a > 0) {
         ctx.fillStyle = rgba(st.bgColor, a);
         const rx = x0 - padX, ry = y - padY, rw = widths[i] + padX * 2, rh = lh + padY * 2 - 1, rad = px * 0.12;
-        ctx.beginPath(); ctx.roundRect ? ctx.roundRect(rx, ry, rw, rh, rad) : ctx.rect(rx, ry, rw, rh); ctx.fill();
+        ctx.beginPath(); ctx.rect(rx, ry, rw, rh); ctx.fill();
       }
       let x = x0;
       for (const r of l) {
