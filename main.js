@@ -366,7 +366,9 @@ function clipName(base, start, end, ext){
 // Builds the ffmpeg command for one export. Kept separate so it can be retried in a simpler form.
 function clipArgs(o, out, { copy, withSubs }){
   const dur = Math.max(0.1, o.end - o.start);
-  const a = ["-hide_banner", "-nostdin", "-y", "-ss", o.start.toFixed(3), "-i", o.input, "-t", dur.toFixed(3)];
+  const lg = o.logo && o.format !== "m4a" && fs.existsSync(logoPath(o.logo.id)) ? o.logo : null;
+  // -t comes after every input so it applies to the output, not to the logo
+  const a = ["-hide_banner", "-nostdin", "-y", "-ss", o.start.toFixed(3), "-i", o.input].concat(lg ? ["-i", logoPath(lg.id)] : [], ["-t", dur.toFixed(3)]);
   const audio = o.audioTrack != null && o.audioTrack >= 0 ? `0:a:${o.audioTrack}` : null;
   if (o.format === "m4a") {
     if (!audio) throw new Error("this video has no sound to save");
@@ -397,6 +399,15 @@ function clipArgs(o, out, { copy, withSubs }){
     // Picture subtitles are drawn over the full-size frame, then the rest of the chain runs.
     const pre = o.hdr && !keepHdr ? vf.shift() + "," : "";
     complex = `[0:v:0]${pre ? pre.slice(0, -1) : "null"}[base];[base][0:s:${o.sub.track}]overlay=(W-w)/2:(H-h)/2:eof_action=pass${vf.length ? "," + vf.join(",") : ""}`;
+  }
+  // The network logo goes on last, at its final pixel size, in the chosen corner.
+  if (lg) {
+    const base = complex ? complex + "[vpre]" : `[0:v:0]${vf.length ? vf.join(",") : "null"}[vpre]`;
+    const m = Math.max(0, Math.round(lg.m || 0)), op = Math.max(0.05, Math.min(1, lg.opacity == null ? 1 : lg.opacity));
+    // On an HDR (PQ) picture, plain white would be far too bright: map the logo to HDR reference white (203 nits).
+    const pq = keepHdr && o.hdr !== "HLG" ? ",lutrgb=r='PQ':g='PQ':b='PQ'".replace(/PQ/g, "pow((0.8359375+18.8515625*pow(pow(val/255\\,2.2)*0.0203\\,0.1593017578125))/(1+18.6875*pow(pow(val/255\\,2.2)*0.0203\\,0.1593017578125))\\,78.84375)*255") : "";
+    const pos = { tl: `x=${m}:y=${m}`, tr: `x=main_w-overlay_w-${m}:y=${m}`, bl: `x=${m}:y=main_h-overlay_h-${m}`, br: `x=main_w-overlay_w-${m}:y=main_h-overlay_h-${m}` }[lg.pos || "tl"];
+    complex = `${base};[1:v]format=rgba,scale=${Math.max(8, Math.round(lg.w))}:-1:flags=lanczos,colorchannelmixer=aa=${op.toFixed(3)}${pq}[lg];[vpre][lg]overlay=${pos}:format=auto`;
   }
   if (o.format === "gif") {
     const chain = complex ? complex.replace(/$/, ",split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4[out]")
@@ -449,7 +460,7 @@ ipcMain.handle("clip-export", async (e, o) => {
   }
   // Fast mode copies the picture without re-encoding; it falls back to a full encode if the format won't allow it.
   const attempts = [];
-  const canCopy = o.mode === "fast" && o.format === "mp4" && !o.sub && !o.look && !o.height && !(o.hdr && !o.keepHdr);
+  const canCopy = o.mode === "fast" && o.format === "mp4" && !o.sub && !o.look && !o.height && !o.logo && !(o.hdr && !o.keepHdr);
   if (canCopy) attempts.push({ copy: true, withSubs: false });
   attempts.push({ copy: false, withSubs: !!o.sub });
   if (o.sub) attempts.push({ copy: false, withSubs: false, note: "Subtitles couldn't be added, so this clip has none." });
@@ -652,6 +663,23 @@ ipcMain.handle("sidecar-subs", async (_e, videoPath) => {
     return [...new Set(found)].slice(0, 12).filter(p => fs.statSync(p).size < 5e6).map(p => ({ name: path.basename(p), data: new Uint8Array(fs.readFileSync(p)) }));
   } catch { return []; }
 });
+
+/* ---------- network logos (the company's own logo files, used as watermarks) ---------- */
+const logoDir = () => path.join(app.getPath("userData"), "logos");
+const logoIndex = () => path.join(logoDir(), "logos.json");
+function readLogos(){ try { return JSON.parse(fs.readFileSync(logoIndex(), "utf8")); } catch { return []; } }
+function writeLogos(list){ fs.mkdirSync(logoDir(), { recursive: true }); fs.writeFileSync(logoIndex(), JSON.stringify(list, null, 1)); }
+const logoPath = id => path.join(logoDir(), `${String(id).replace(/[^a-z0-9-]/gi, "")}.png`);
+ipcMain.handle("logos-list", () => readLogos().filter(l => fs.existsSync(logoPath(l.id))).map(l => ({ ...l, url: pathToFileURL(logoPath(l.id)).href + "?v=" + (l.v || 0) })));
+ipcMain.handle("logos-add", (_e, { name, png, w, h }) => {
+  const id = "lg" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  fs.mkdirSync(logoDir(), { recursive: true });
+  fs.writeFileSync(logoPath(id), Buffer.from(png));
+  const list = readLogos(); list.push({ id, name: String(name || "Logo").slice(0, 60), w, h, v: 1 }); writeLogos(list);
+  return id;
+});
+ipcMain.handle("logos-rename", (_e, { id, name }) => { const list = readLogos(); const l = list.find(x => x.id === id); if (l) { l.name = String(name || l.name).slice(0, 60); writeLogos(list); } return true; });
+ipcMain.handle("logos-remove", (_e, id) => { writeLogos(readLogos().filter(x => x.id !== id)); try { fs.unlinkSync(logoPath(id)); } catch {} return true; });
 
 /* ---------- self-updating from GitHub Releases ---------- */
 const pkg = require("./package.json");
