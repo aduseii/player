@@ -488,7 +488,7 @@ main:has(> #view-board:not([hidden])){padding-block:12px}
 
 /* subtitles stay put: one fixed height that clears the control bar, so showing or hiding the controls never moves them */
 .stage:not(.is-empty) #subsBottom{bottom:var(--sub-pos,7%);transition:none}
-.stage:not(.is-empty) .subs-layer,.stage:not(.is-empty) #pgsLayer{z-index:4}   /* drawn over the control bar, so they stay readable while it shows */
+.stage:not(.is-empty) .subs-layer,.stage:not(.is-empty) #pgsLayer{z-index:2}   /* behind the control bar while it shows */
 .stage:not(.is-empty) #pgsLayer{transform:translateY(calc(7% - var(--sub-pos,7%)));transition:none}
 
 
