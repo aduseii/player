@@ -615,6 +615,7 @@ main{overflow-x:clip}
 .ambient[hidden]{display:block;opacity:0}
 .stage.is-empty{background:rgba(255,255,255,.035);backdrop-filter:blur(30px)}
 .stage.is-empty video{visibility:hidden}
+.stage.sound-wait .bigplay{display:none!important}
 .empty{background:
   radial-gradient(55% 70% at 25% 0%, rgba(92,108,255,.28), transparent 70%),
   radial-gradient(50% 70% at 85% 100%, rgba(255,170,60,.16), transparent 70%)}
@@ -2446,9 +2447,42 @@ v.addEventListener("waiting", () => { if (ext) ext.a.pause(); });
 v.addEventListener("seeking", () => extTo(v.currentTime));
 v.addEventListener("ratechange", () => { if (ext) ext.a.playbackRate = v.playbackRate; });
 setInterval(() => { if (ext && !v.paused) v.dispatchEvent(new Event("timeupdate")); }, 250);   // sync check 4x a second
+// When the sound is still on its way, the picture waits for it (like buffering) instead of the
+// sound being restarted over and over, which is what made streamed sound play for a second and stop.
+let soundHold = null;
+function holdForSound(){
+  if (soundHold || !ext) return;
+  soundHold = { since: performance.now(), id: cur && cur.id }; ext.holds++; ext.note("waiting for sound at " + v.currentTime.toFixed(1) + " s");
+  $("#stage").classList.add("sound-wait"); $("#spinner").hidden = false; v.pause();
+}
+function releaseSound(play){
+  if (!soundHold) return;
+  soundHold = null; $("#stage").classList.remove("sound-wait"); $("#spinner").hidden = true;
+  if (play) v.play().catch(() => {});
+}
+v.addEventListener("play", () => { if (soundHold) releaseSound(false); });
+setInterval(() => {
+  if (!soundHold) return;
+  if (!ext || !ext.live || !cur || cur.id !== soundHold.id) { releaseSound(false); return; }
+  const want = Math.max(0, v.currentTime - aDelay()), dur = (isFinite(v.duration) && v.duration) || 0;
+  const ready = ext.aheadAt(want) >= 2.5 || (ext.ended && dur && ext.frontier(want) >= dur - 1);
+  if (ready) { ext.a.currentTime = want; ext.note("sound ready"); releaseSound(true); return; }
+  if (ext.ended && !ext.gotThis) return;                  // the watchdog is starting it again
+  if (performance.now() - soundHold.since > 30000) {
+    ext.note("gave up waiting for sound"); releaseSound(true);
+    showBanner({ id: "audio", bad: true, text: "The sound for this stream is loading very slowly, so the video is playing without it for now.", actions: [{ label: "Copy sound report", fn: copySoundReport }, { label: "Dismiss", fn: () => hideBanner("audio") }] });
+  }
+}, 250);
 v.addEventListener("timeupdate", () => {
   if (!ext || v.paused) return;
   const want = Math.max(0, v.currentTime - aDelay()), drift = ext.a.currentTime - want;
+  if (ext.live && ext.aheadAt(want) < 0.25 && !bannerShown("audio")) {
+    const dur = (isFinite(v.duration) && v.duration) || 0;
+    if (!(dur && want >= dur - 1.5)) {
+      if (ext.coming(want) || (ext.ended && want - ext.frontier(want) <= 6)) { holdForSound(); return; }
+      ext.seek(want); holdForSound(); return;
+    }
+  }
   // Big gaps jump; small ones are closed by running the sound 3% faster or slower for a moment (no clicks).
   if (Math.abs(drift) > .5 || (!ext.live && ext.a.readyState > 1 && Math.abs(drift) > .25)) { ext.live ? ext.seek(want) : (ext.a.currentTime = want); ext.a.playbackRate = v.playbackRate; }
   else ext.a.playbackRate = Math.abs(drift) > .025 ? v.playbackRate * (drift > 0 ? .97 : 1.03) : v.playbackRate;
@@ -2886,6 +2920,13 @@ function startLive(ai){
     ended: null, lastData: performance.now(), gotThis: 0, fails: 0, retryAt: 0 };
   a.preload = "auto"; a.src = L.url; a.playbackRate = v.playbackRate;
   L.ahead = () => { const t = a.currentTime, b = a.buffered; for (let i = 0; i < b.length; i++) if (b.start(i) <= t + 0.3 && b.end(i) >= t) return b.end(i) - t; return 0; };
+  L.log = []; L.note = m => { L.log.push(new Date().toISOString().slice(11, 19) + " " + m); if (L.log.length > 60) L.log.shift(); };
+  L.restarts = 0; L.holds = 0; L.bytes = 0;
+  // How far the running decoder has got, looking from time t (where the sound runs out).
+  L.frontier = t => { const b = a.buffered; let f = -1; for (let i = 0; i < b.length; i++) if (b.start(i) <= t + 0.3) f = Math.max(f, b.end(i)); return f < 0 ? L.restartAt : Math.max(f, L.restartAt); };
+  L.aheadAt = t => { const b = a.buffered; for (let i = 0; i < b.length; i++) if (b.start(i) <= t + 0.3 && b.end(i) >= t) return b.end(i) - t; return 0; };
+  // True when the decoder is already working its way to t, so waiting beats starting over.
+  L.coming = t => !L.ended && t >= L.restartAt - 0.5 && t - L.frontier(t) <= 6;
   L.has = t => { const b = a.buffered; for (let i = 0; i < b.length; i++) if (b.start(i) <= t + 0.05 && b.end(i) > t + 1) return true; return false; };
   L.evict = force => {
     const sb = L.sb; if (!sb || sb.updating) return false;
@@ -2913,13 +2954,14 @@ function startLive(ai){
   };
   L.restart = t => {
     L.id = ++liveSeq; L.q = []; L.held = false; L.lastRestart = performance.now(); L.restartAt = t;
-    L.ended = null; L.lastData = performance.now(); L.gotThis = 0;
+    L.ended = null; L.lastData = performance.now(); L.gotThis = 0; L.restarts++; L.note("start at " + t.toFixed(1) + " s");
     if (L.sb) { try { L.sb.abort(); } catch {} }
     L.offset = t; L.pump();
     N.astreamStart(Object.assign({ id: L.id, input: inp, track: ai, start: Math.max(0, t) }, audioOpts(ai)));
   };
   L.seek = t => {
     if (L.has(t)) { a.currentTime = t; return; }
+    if (L.coming(t)) { a.currentTime = t; return; }     // the decoder is nearly there: wait, don't start over
     const recent = performance.now() - L.lastRestart < 1500 && Math.abs(L.restartAt - t) < 3;
     if (!recent) L.restart(t);
     a.currentTime = t;
@@ -2953,10 +2995,27 @@ function startLive(ai){
   return true;
 }
 if (N && N.onAstreamData) {
-  N.onAstreamData((id, d) => { if (ext && ext.live && id === ext.id) { ext.lastData = performance.now(); ext.gotThis += d.byteLength || d.length || 0; ext.q.push(d instanceof Uint8Array ? d : new Uint8Array(d)); ext.pump(); } });
+  N.onAstreamData((id, d) => { if (ext && ext.live && id === ext.id) { ext.lastData = performance.now(); ext.gotThis += d.byteLength || d.length || 0; ext.bytes += d.byteLength || d.length || 0; ext.q.push(d instanceof Uint8Array ? d : new Uint8Array(d)); ext.pump(); } });
   // An early end is picked up again by the watchdog; it only gives up after repeated failures.
-  N.onAstreamEnd((id, code, msg) => { if (ext && ext.live && id === ext.id) ext.ended = { code, msg: msg || "" }; });
+  N.onAstreamEnd((id, code, msg) => { if (ext && ext.live && id === ext.id) { ext.ended = { code, msg: msg || "" }; ext.note("decoder ended, code " + code + (msg ? ": " + msg : "")); } });
 }
+function soundReport(){
+  const P = cur && cur.probe, ai = ext ? ext.ai : (cur && cur.audioIdx) || 0, t = P && P.audio && P.audio[ai];
+  const lines = ["Crave sound report", "Version: " + (window.CRAVE_VERSION || $("#updText") && $("#updText").textContent || "?"),
+    "Source: " + (cur ? KIND_LABEL[cur.kind] + " " + (cur.url ? cur.url.replace(/\/play\/.*$/, "/play/…") : cur.name) : "none"),
+    "Container: " + (P ? P.container : "?") + ", video " + (P && P.video[0] ? P.video[0].codec : "?"),
+    "Audio track " + ai + ": " + (t ? [t.codec, t.layout || "", t.lang || ""].join(" ") : "?") + (P ? " (" + P.audio.length + " tracks)" : ""),
+    "Route: " + (ext && ext.live ? "Crave's decoder" : "built-in player"),
+    "Settings: " + JSON.stringify(AU()),
+    "Video: t=" + v.currentTime.toFixed(1) + " paused=" + v.paused + " readyState=" + v.readyState + " decodedAudioBytes=" + v.webkitAudioDecodedByteCount];
+  if (ext && ext.live) {
+    const b = ext.a.buffered, r = []; for (let i = 0; i < b.length; i++) r.push(b.start(i).toFixed(1) + "-" + b.end(i).toFixed(1));
+    lines.push("Decoder: bytes=" + ext.bytes + " restarts=" + ext.restarts + " waits=" + ext.holds + " fails=" + ext.fails + " audioT=" + ext.a.currentTime.toFixed(1) + " buffered=[" + r.join(", ") + "]" + (ext.ended ? " ended code " + ext.ended.code + " " + ext.ended.msg : " running"));
+    lines.push("Log:", ...ext.log);
+  }
+  return lines.join("\n");
+}
+function copySoundReport(){ const r = soundReport(); try { navigator.clipboard.writeText(r).then(() => toast("Sound report copied. Paste it to Claude."), () => toast("Couldn't copy the report", true)); } catch { toast("Couldn't copy the report", true); } console.info(r); }
 function liveGaveUp(L){
   const msg = (L.ended && L.ended.msg) || "the stream stopped sending sound";
   const t = cur && cur.probe && cur.probe.audio && cur.probe.audio[L.ai];
@@ -2964,6 +3023,7 @@ function liveGaveUp(L){
   L.retryAt = Infinity;
   showBanner({ id: "audio", bad: true, text: "The sound for this video keeps cutting out (" + msg + "). The server may be busy.", actions: [
     { label: "Try again", fn: () => { hideBanner("audio"); L.fails = 0; L.retryAt = 0; L.restart(L.bufEnd()); } },
+    { label: "Copy sound report", fn: copySoundReport },
     { label: "Dismiss", fn: () => hideBanner("audio") }] });
 }
 
@@ -3611,6 +3671,7 @@ function renderLogoMenu(m){
   m.querySelector('[data-act="manage"]').onclick = () => { closeMenu(); if (!v.paused) v.pause(); switchView("settings"); $("#logoCard").scrollIntoView({ behavior: "smooth", block: "start" }); };
 }
 
+document.addEventListener("click", e => { if (e.target.id === "soundReport") { e.preventDefault(); copySoundReport(); } });
 /* ================= stage menus (subtitles / audio) ================= */
 let menuKind = null;
 function openMenu(k){ if (menuKind === k) { closeMenu(); return; } if (clip.on && !clip.busy) exitClip(); menuKind = k; renderMenu(); $("#menu").hidden = false; poke(); }
@@ -3674,7 +3735,7 @@ function renderMenu(){
         <button class="mi" data-opt="surround" ${multi ? "" : "disabled"}>${ck(O.surround && multi)}<span><span class="a">Surround output</span><span class="b">${multi ? "Send 5.1 to your speakers instead of stereo" : "This track is stereo"}</span></span></button>
         <button class="mi" data-opt="decoder">${ck(O.decoder === "crave")}<span><span class="a">Always use Crave's decoder</span><span class="b">Plays every audio format; use if a video is ever silent</span></span></button>
         <div class="delay"><span style="flex:1">Delay <span class="mono" style="color:var(--honey)">${d > 0 ? "+" : ""}${d} ms</span></span><button class="btn sm" data-dl="-50" title="Sound earlier (-)">Earlier</button><button class="btn sm" data-dl="50" title="Sound later (=)">Later</button>${d ? `<button class="btn sm ghost" data-dl="0">Reset</button>` : ""}</div>
-        <p class="note" style="padding-top:0">${ext && ext.live ? "Sound is coming from Crave's decoder." : "Sound is coming from the built-in player."} Keys: - and = change the delay.</p>`;
+        <p class="note" style="padding-top:0">${ext && ext.live ? "Sound is coming from Crave's decoder." : "Sound is coming from the built-in player."} Keys: - and = change the delay. <a href="#" id="soundReport">Copy sound report</a></p>`;
     }
     m.innerHTML = h;
     m.querySelectorAll("[data-opt]").forEach(b => b.onclick = () => {
