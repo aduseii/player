@@ -737,6 +737,22 @@ html[data-theme="light"] .keys kbd{background:rgba(20,22,43,.07);color:var(--fg)
 html[data-theme="light"] .toast{background:rgba(255,255,255,.92);color:var(--fg);box-shadow:0 12px 40px rgba(20,22,43,.18)}
 html[data-theme="light"] .ss-tag{background:rgba(20,22,43,.07)}
 html[data-theme="light"] .lightbox{background:rgba(238,241,248,.95)}
+/* ---------- control bar below the picture (VLC style) ---------- */
+.stage.bar-below:not(.is-empty) video,.stage.bar-below:not(.is-empty) #hdrLayer,.stage.bar-below:not(.is-empty) #pgsLayer{top:0;bottom:auto;height:calc(100% - var(--bar,104px))}
+.stage.bar-below:not(.is-empty) #subsBottom{bottom:calc(var(--bar,104px) + (100% - var(--bar,104px)) * var(--sub-posf,.07))}
+.stage.bar-below:not(.is-empty) .hud{background:rgba(14,16,30,.94);backdrop-filter:blur(30px) saturate(1.5);padding:14px 22px 12px;border-top:.5px solid rgba(255,255,255,.08);opacity:1;pointer-events:auto;z-index:3}
+.stage.bar-below.idle .hud{opacity:1;pointer-events:auto}
+.stage.bar-below.idle{cursor:default}
+.stage.bar-below.idle video{cursor:none}
+.stage.bar-below .bigplay{top:calc((100% - var(--bar,104px)) / 2)}
+.stage.bar-below .titlebar{display:none}
+html[data-theme="light"] .stage.bar-below:not(.is-empty) .hud{background:rgba(255,255,255,.9);border-top-color:rgba(20,22,43,.08)}
+html[data-theme="light"] .stage.bar-below:not(.is-empty) .hud .cb:not(.on),html[data-theme="light"] .stage.bar-below:not(.is-empty) .hud .time,html[data-theme="light"] .stage.bar-below:not(.is-empty) .speed-sel{color:#14162b}
+html[data-theme="light"] .stage.bar-below:not(.is-empty) .hud .cb:hover{background:rgba(20,22,43,.07)}
+html[data-theme="light"] .stage.bar-below:not(.is-empty) .seek .rail{background:rgba(20,22,43,.14)}
+html[data-theme="light"] .stage.bar-below:not(.is-empty) .seek .buf{background:rgba(20,22,43,.12)}
+html[data-theme="light"] .stage.bar-below:not(.is-empty) .seek .knob{background:#fff;box-shadow:0 0 0 1px rgba(20,22,43,.15),0 0 0 4px rgba(255,192,77,.35)}
+html[data-theme="light"] .stage.bar-below:not(.is-empty) #hdrBtn .lbl{background:#14162b;color:#fff}
 </style>
 </head>
 <body>
@@ -936,8 +952,10 @@ html[data-theme="light"] .lightbox{background:rgba(238,241,248,.95)}
   <section class="view" id="view-settings" hidden>
     <div class="vhead"><div><h1>Settings</h1><p>Saved on this computer.</p></div></div>
     <div class="settings">
-      <div class="set"><div class="d"><strong>Appearance</strong><span>Light, dark, or follow Windows. The video itself always sits on dark.</span></div>
+      <div class="set"><div class="d"><strong>Appearance</strong><span>Light, dark, or follow Windows. The picture always sits on black.</span></div>
         <div class="seg" id="setTheme" role="radiogroup" aria-label="Appearance"><button role="radio" data-theme-opt="light">Light</button><button role="radio" data-theme-opt="dark">Dark</button><button role="radio" data-theme-opt="system">Match Windows</button></div></div>
+      <div class="set"><div class="d"><strong>Controls</strong><span>Below the picture keeps the bar in view and never covers the video. Full screen always uses the fading bar.</span></div>
+        <div class="seg" role="radiogroup" aria-label="Controls"><button role="radio" data-ctrl-opt="below">Below the picture</button><button role="radio" data-ctrl-opt="over">Over the picture</button></div></div>
       <div class="set"><div class="d"><strong>Skip interval</strong><span>How far the back and forward buttons jump.</span></div>
         <select id="setSkip"><option value="5">5 seconds</option><option value="10">10 seconds</option><option value="15">15 seconds</option><option value="30">30 seconds</option><option value="60">60 seconds</option></select></div>
       <div class="set"><div class="d"><strong>Default speed</strong><span>Speed every new video starts at.</span></div>
@@ -1100,7 +1118,7 @@ const store = {
   get(k, d){ try { const x = localStorage.getItem("crave:" + k); return x == null ? d : JSON.parse(x); } catch { return d; } },
   set(k, val){ try { localStorage.setItem("crave:" + k, JSON.stringify(val)); } catch {} }
 };
-const DEF = { wm:{ pos:"tl", size:12, opacity:100, margin:3, preview:true, last:null }, audio:{ decoder:"auto", surround:false, night:false, dialogue:false }, theme:"dark", ambient:true, subPos:7, sidecarSubs:true, saveSubs:true, subLang:"en", shotSubs:true, subStyle:{ color:"#ffffff", edge:"shadow", bg:"none", bgColor:"#000000", bgOpacity:60 }, hdr:"off", subSize:"medium", autoSubs:true, skip:10, speed:1, fmt:"image/png", autoDl:false, resume:true, autoNext:true, stats:true, volume:1, muted:false };
+const DEF = { wm:{ pos:"tl", size:12, opacity:100, margin:3, preview:true, last:null }, audio:{ decoder:"auto", surround:false, night:false, dialogue:false }, theme:"dark", ctrlLayout:"below", ambient:true, subPos:7, sidecarSubs:true, saveSubs:true, subLang:"en", shotSubs:true, subStyle:{ color:"#ffffff", edge:"shadow", bg:"none", bgColor:"#000000", bgOpacity:60 }, hdr:"off", subSize:"medium", autoSubs:true, skip:10, speed:1, fmt:"image/png", autoDl:false, resume:true, autoNext:true, stats:true, volume:1, muted:false };
 const S = Object.assign({}, DEF, store.get("settings", {}));
 const saveSettings = () => store.set("settings", S);
 // Appearance: light, dark, or follow Windows. Set before anything draws so there is no flash.
@@ -1443,8 +1461,20 @@ $("#nowFind").onclick = () => openSubSearch();
 // The picture gets the window height minus the info row under it, so the title is always in view.
 function fitStage(){ const nb = $("#nowbar"); document.documentElement.style.setProperty("--info-h", (nb.hidden ? 0 : nb.offsetHeight + 14) + "px"); }
 try { new ResizeObserver(fitStage).observe($("#nowbar")); } catch {}
+setTimeout(() => applyCtrlLayout(), 0);
 v.addEventListener("loadedmetadata", () => renderNow());
 /* ambient glow: the page behind the player takes its colours from the picture */
+/* control bar below the picture (like VLC), or over it; full screen always uses the fading bar over the picture */
+function applyCtrlLayout(){
+  const below = (S.ctrlLayout || "below") === "below" && !document.fullscreenElement;
+  stage.classList.toggle("bar-below", below);
+  stage.style.setProperty("--bar", below ? $("#hud").offsetHeight + "px" : "0px");
+  document.querySelectorAll("[data-ctrl-opt]").forEach(b => b.setAttribute("aria-checked", String(b.dataset.ctrlOpt === (S.ctrlLayout || "below"))));
+  try { sizeSubs(); renderWm(); } catch {}
+}
+document.addEventListener("fullscreenchange", applyCtrlLayout);
+try { new ResizeObserver(() => { if (barBelow()) stage.style.setProperty("--bar", $("#hud").offsetHeight + "px"); }).observe($("#hud")); } catch {}
+document.addEventListener("click", e => { const b = e.target.closest("[data-ctrl-opt]"); if (b) { S.ctrlLayout = b.dataset.ctrlOpt; saveSettings(); applyCtrlLayout(); } });
 const amb = $("#ambient"), ambCtx = amb.getContext("2d");
 let ambT = 0;
 function ambient(){
@@ -2656,7 +2686,10 @@ v.addEventListener("enterpictureinpicture", () => { const e = subs[activeSub]; i
 v.addEventListener("leavepictureinpicture", () => { const e = subs[activeSub]; if (e && e.tt) e.tt.mode = "hidden"; });
 
 const SUB_SCALE = { small: 0.82, medium: 1, large: 1.22, xlarge: 1.45 };
-function sizeSubs(){ stage.style.setProperty("--sub-size", Math.max(13, Math.round(stage.clientHeight * 0.052 * (SUB_SCALE[S.subSize] || 1))) + "px"); pgsShown = -2; }
+// The picture's own area: the whole player, minus the control bar when it sits below the picture.
+const barBelow = () => stage.classList.contains("bar-below");
+const picH = () => Math.max(1, stage.clientHeight - (barBelow() ? $("#hud").offsetHeight : 0));
+function sizeSubs(){ stage.style.setProperty("--sub-size", Math.max(13, Math.round(picH() * 0.052 * (SUB_SCALE[S.subSize] || 1))) + "px"); pgsShown = -2; }
 try { new ResizeObserver(sizeSubs).observe(stage); } catch { sizeSubs(); }
 
 /* ---- PGS (Blu-ray picture subtitles) ---- */
@@ -2750,7 +2783,7 @@ function drawPgs(){
   const t = v.currentTime - (e.offset || 0);
   let lo = 0, hi = D.length - 1, idx = -1;
   while (lo <= hi) { const m = (lo + hi) >> 1; if (D[m].pts <= t + 0.001) { idx = m; lo = m + 1; } else hi = m - 1; }
-  const W = stage.clientWidth, H = stage.clientHeight, size = W + "x" + H + "x" + v.videoWidth;
+  const W = stage.clientWidth, H = picH(), size = W + "x" + H + "x" + v.videoWidth;
   if (idx === pgsShown && size === pgsSize) return;
   pgsShown = idx; pgsSize = size;
   const dpr = window.devicePixelRatio || 1;
@@ -2889,7 +2922,7 @@ function applySubStyle(){
   $("#ssBgColor").value = st.bgColor; $("#ssBgOpacity").value = st.bgOpacity; $("#ssBgOpacityLbl").textContent = st.bgOpacity + "%";
   $("#ssBgColor").disabled = $("#ssBgOpacity").disabled = st.bg === "none";
   $("#subPreview").style.fontSize = Math.round(22 * (SUB_SCALE[S.subSize] || 1)) + "px";
-  const pos = subPos(); r.setProperty("--sub-pos", pos + "%");
+  const pos = subPos(); r.setProperty("--sub-pos", pos + "%"); r.setProperty("--sub-posf", pos / 100);
   $("#ssPos").value = pos; $("#ssPosLbl").textContent = pos + "%" + (pos === 7 ? " (standard)" : "");
 }
 // Subtitle height: % of the player height from the bottom edge. 7% is the usual broadcast position.
@@ -3278,7 +3311,7 @@ function hdrRender(size){
   let W, H, x, y, w, h;
   if (size) { W = w = size.w; H = h = size.h; x = y = 0; }
   else {
-    const dpr = window.devicePixelRatio || 1, sw = stage.clientWidth, sh = stage.clientHeight, sc = Math.min(sw / vw, sh / vh);
+    const dpr = window.devicePixelRatio || 1, sw = stage.clientWidth, sh = picH(), sc = Math.min(sw / vw, sh / vh);
     W = Math.round(sw * dpr); H = Math.round(sh * dpr); w = Math.round(vw * sc * dpr); h = Math.round(vh * sc * dpr); x = (W - w) >> 1; y = (H - h) >> 1;
   }
   if (hdrCanvas.width !== W || hdrCanvas.height !== H) { hdrCanvas.width = W; hdrCanvas.height = H; }
@@ -3694,7 +3727,7 @@ function setCurLogo(id){
 function renderWm(){
   const l = curLogo(), W = WM();
   if (!l || !W.preview || !v.videoWidth) { wmLayer.hidden = true; return; }
-  const sw = stage.clientWidth, sh = stage.clientHeight, sc = Math.min(sw / v.videoWidth, sh / v.videoHeight);
+  const sw = stage.clientWidth, sh = picH(), sc = Math.min(sw / v.videoWidth, sh / v.videoHeight);
   const pw = v.videoWidth * sc, ph = v.videoHeight * sc, ox = (sw - pw) / 2, oy = (sh - ph) / 2;
   const w = pw * W.size / 100, m = pw * W.margin / 100, h = w * (l.h / l.w || 0.3);
   if (wmLayer.dataset.id !== l.id) { wmLayer.src = l.url; wmLayer.dataset.id = l.id; }
