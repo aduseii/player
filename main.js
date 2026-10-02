@@ -323,8 +323,16 @@ function clipArgs(o, out, { copy, withSubs }){
   let complex = null;
   if (withSubs && o.sub && o.sub.kind === "text") {
     const st = o.subStyle || {};
-    const style = [`FontName=${st.font || "Arial"}`, `FontSize=${st.size || 22}`, `PrimaryColour=${assColour("ffffff")}`, "OutlineColour=&H00000000", "BackColour=&H80000000", "BorderStyle=1", "Outline=1.2", "Shadow=0.6", "MarginV=28"].join(",");
-    vf.push(`subtitles=${o.subFile}:force_style='${style}'`);
+    const hex = c => /^#?[0-9a-f]{6}$/i.test(c || "") ? c.replace("#", "") : "ffffff";
+    const alpha = op => Math.round((1 - Math.max(0, Math.min(100, op == null ? 60 : op)) / 100) * 255).toString(16).padStart(2, "0").toUpperCase();
+    const style = [`FontName=${st.font || "Arial"}`, `FontSize=${st.size || 16}`, `PrimaryColour=${assColour(hex(st.color))}`, "MarginV=22"];
+    if (st.bg === "line" || st.bg === "band") {
+      // libass draws the box in the outline colour; its alpha is inverted (00 = solid)
+      style.push("BorderStyle=3", `OutlineColour=&H${alpha(st.bgOpacity)}${assColour(hex(st.bgColor)).slice(4)}`, "Outline=1.6", "Shadow=0");
+    } else if (st.edge === "outline") style.push("BorderStyle=1", "OutlineColour=&H00000000", "Outline=1.4", "Shadow=0");
+    else if (st.edge === "none") style.push("BorderStyle=1", "Outline=0", "Shadow=0");
+    else style.push("BorderStyle=1", "OutlineColour=&H40000000", "BackColour=&H60000000", "Outline=0.8", "Shadow=0.9");
+    vf.push(`subtitles=${o.subFile}:force_style='${style.join(",")}'`);
   }
   if (o.look > 0) { const k = o.look; vf.push(`eq=contrast=${(1 + 0.10 * k).toFixed(3)}:saturation=${(1 + 0.28 * k).toFixed(3)}:gamma=${(1 - 0.04 * k).toFixed(3)},unsharp=5:5:${(0.35 * k).toFixed(2)}:5:5:0`); }
   if (o.format === "gif") vf.push(`fps=${o.fps || 15}`, `scale=${o.width || 640}:-2:flags=lanczos`);

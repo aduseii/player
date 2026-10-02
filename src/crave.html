@@ -126,7 +126,18 @@ video::cue{font-family:var(--f-body);background:rgba(0,0,0,.6);font-size:clamp(1
 #subsBottom{bottom:7%}
 #subsTop{top:7%}
 .stage:not(.idle):not(.is-empty) #subsBottom{bottom:calc(7% + 64px)}
-.sub-line{font-family:var(--sub-font);font-weight:500;color:#fff;text-align:center;line-height:1.22;max-width:100%;overflow-wrap:anywhere;letter-spacing:.005em;text-shadow:0 0 .08em #000,0 0 .08em #000,0 .04em .12em #000,0 0 .35em rgba(0,0,0,.55)}
+.sub-line{font-family:var(--sub-font);font-weight:500;color:var(--sub-color,#fff);text-align:center;line-height:1.22;max-width:100%;overflow-wrap:anywhere;letter-spacing:.005em;text-shadow:var(--sub-shadow)}
+.sub-t{background:var(--sub-bg,transparent);padding:.04em .3em;border-radius:.12em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.sub-band .subs-layer:not(:empty){left:0;right:0;background:var(--sub-band-bg);padding:.18em 6%}
+.sub-preview{position:relative;height:150px;border-radius:12px;overflow:hidden;background:linear-gradient(160deg,#7fb3d5 0%,#e8d9b5 45%,#f4f1ea 55%,#2e4a3a 100%);display:flex;align-items:flex-end;justify-content:center;padding-bottom:16px}
+.sub-preview .subs-layer{position:static;font-size:22px}
+.sub-style{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px 18px;margin-top:14px}
+.sub-style label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}
+.sub-style select,.sub-style input[type=color]{background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:7px 9px;color:var(--fg)}
+.sub-style input[type=color]{height:36px;padding:3px;width:100%}
+.sub-style input[type=range]{accent-color:var(--honey)}
+.sub-style .row{display:flex;align-items:center;gap:10px}
+.sub-style .row input[type=range]{flex:1}
 #pgsLayer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2;transition:transform .2s ease}
 .stage:not(.idle):not(.is-empty) #pgsLayer{transform:translateY(-56px)}
 .stage{container-type:inline-size}
@@ -478,8 +489,21 @@ dialog h3{font:700 22px var(--f-display);margin:0 0 12px}
         <label class="switch"><input type="checkbox" id="setResume"><i></i></label></div>
       <div class="set"><div class="d"><strong>Turn on built-in subtitles</strong><span>Shows a file's own subtitles as soon as it opens, in your browser's language when the file has it.</span></div>
         <label class="switch"><input type="checkbox" id="setAutoSubs"><i></i></label></div>
-      <div class="set"><div class="d"><strong>Subtitle size</strong><span>Subtitles scale with the video, the way streaming services show them.</span></div>
-        <select id="setSubSize"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></div>
+      <div class="set" id="subStyleCard" style="display:block">
+        <div class="d"><strong>Subtitle style</strong><span>Used on screen, in screenshots and in clips with burned-in subtitles.</span></div>
+        <div class="sub-preview" style="margin-top:12px"><div class="subs-layer" id="subPreview"><div class="sub-line"><span class="sub-t">This is how your subtitles will look.</span></div><div class="sub-line"><span class="sub-t"><i>Second line, in italics.</i></span></div></div></div>
+        <div class="sub-style">
+          <label>Size<select id="setSubSize"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option><option value="xlarge">Extra large</option></select></label>
+          <label>Text colour<select id="ssColor"><option value="#ffffff">White</option><option value="#fff176">Yellow</option><option value="#80deea">Cyan</option><option value="#a5d6a7">Green</option><option value="#d9d9d9">Light grey</option></select></label>
+          <label>Edges<select id="ssEdge"><option value="shadow">Soft shadow</option><option value="outline">Outline</option><option value="none">None</option></select></label>
+          <label>Background<select id="ssBg"><option value="none">None</option><option value="line">Box behind each line</option><option value="band">Full-width band</option></select></label>
+          <label>Background colour<input type="color" id="ssBgColor" value="#000000"></label>
+          <label>Background opacity<span class="row"><input type="range" id="ssBgOpacity" min="0" max="100" step="5"><span class="mono" id="ssBgOpacityLbl" style="min-width:42px;color:var(--fg)">60%</span></span></label>
+        </div>
+        <div style="margin-top:12px"><button class="btn sm ghost" id="ssReset">Reset to Netflix style</button></div>
+      </div>
+      <div class="set"><div class="d"><strong>Subtitles in screenshots</strong><span>Draw the subtitle on screen into saved screenshots.</span></div>
+        <label class="switch"><input type="checkbox" id="setShotSubs"><i></i></label></div>
       <div class="set"><div class="d"><strong>Subtitle font</strong><span id="subFontText">Checking for Netflix Sans…</span></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" id="subFontBtn">Add font file…</button><button class="btn sm ghost" id="subFontReset" hidden>Reset</button></div>
         <input type="file" id="subFontInput" accept=".ttf,.otf,.woff,.woff2" hidden></div>
@@ -567,7 +591,7 @@ const store = {
   get(k, d){ try { const x = localStorage.getItem("crave:" + k); return x == null ? d : JSON.parse(x); } catch { return d; } },
   set(k, val){ try { localStorage.setItem("crave:" + k, JSON.stringify(val)); } catch {} }
 };
-const DEF = { hdr:"off", subSize:"medium", autoSubs:true, skip:10, speed:1, fmt:"image/png", autoDl:false, resume:true, autoNext:true, stats:true, volume:1, muted:false };
+const DEF = { shotSubs:true, subStyle:{ color:"#ffffff", edge:"shadow", bg:"none", bgColor:"#000000", bgOpacity:60 }, hdr:"off", subSize:"medium", autoSubs:true, skip:10, speed:1, fmt:"image/png", autoDl:false, resume:true, autoNext:true, stats:true, volume:1, muted:false };
 const S = Object.assign({}, DEF, store.get("settings", {}));
 const saveSettings = () => store.set("settings", S);
 let library = store.get("library", []);           // [{id,url,name,kind,pos,dur,updated,marks:[{t,label}]}]
@@ -995,6 +1019,7 @@ async function screenshot(){
   if (!v.videoWidth) { toast("Nothing to capture yet. Wait for the video to show a picture.", true); return; }
   let c = hdrFrameCanvas();
   if (!c) { c = document.createElement("canvas"); c.width = v.videoWidth; c.height = v.videoHeight; c.getContext("2d").drawImage(v, 0, 0, c.width, c.height); }
+  if (S.shotSubs) { try { await drawSubsOnto(c); } catch (err) { console.warn("Crave: couldn't draw subtitles into the shot", err); } }
   let blob;
   try { blob = await new Promise((res, rej) => { try { c.toBlob(b => b ? res(b) : rej(new Error("empty")), S.fmt, .92); } catch (e) { rej(e); } }); }
   catch { toast(tainted ? "This site doesn't allow screenshots of its videos. Open the file locally to capture frames." : "Couldn't capture this frame.", true); return; }
@@ -1205,7 +1230,7 @@ function bindSettings(){
   const sel = (id, key, num) => { const el = $(id); el.value = String(S[key]); el.onchange = () => { S[key] = num ? +el.value : el.value; saveSettings(); renderSkipLabels(); }; };
   const sw = (id, key, after) => { const el = $(id); el.checked = !!S[key]; el.onchange = () => { S[key] = el.checked; saveSettings(); after && after(); }; };
   sel("#setSkip", "skip", true); sel("#setSpeed", "speed", true); sel("#setFmt", "fmt");
-  sw("#setAutoDl", "autoDl"); sw("#setResume", "resume"); sw("#setAutoSubs", "autoSubs"); sw("#setAutoNext", "autoNext"); sw("#setStats", "stats", () => { if (cur && cur.torrent) renderStats(); });
+  sw("#setAutoDl", "autoDl"); sw("#setShotSubs", "shotSubs"); sw("#setResume", "resume"); sw("#setAutoSubs", "autoSubs"); sw("#setAutoNext", "autoNext"); sw("#setStats", "stats", () => { if (cur && cur.torrent) renderStats(); });
 }
 
 /* ---------------- input: link bar, files, drop, paste ---------------- */
@@ -1960,7 +1985,7 @@ function renderCues(){
   let bottom = "", top = "";
   if (e && e.tt && e.tt.activeCues) {
     for (const c of [...e.tt.activeCues].sort((a, b) => a.startTime - b.startTime)) {
-      const h = `<div class="sub-line">${cueHTML(c.text)}</div>`;
+      const h = `<div class="sub-line"><span class="sub-t">${cueHTML(c.text)}</span></div>`;
       if (c.top) top += h; else bottom += h;
     }
   }
@@ -1977,7 +2002,7 @@ function bindCueTrack(e){
 v.addEventListener("enterpictureinpicture", () => { const e = subs[activeSub]; if (e && e.tt) e.tt.mode = "showing"; });
 v.addEventListener("leavepictureinpicture", () => { const e = subs[activeSub]; if (e && e.tt) e.tt.mode = "hidden"; });
 
-const SUB_SCALE = { small: 0.82, medium: 1, large: 1.22 };
+const SUB_SCALE = { small: 0.82, medium: 1, large: 1.22, xlarge: 1.45 };
 function sizeSubs(){ stage.style.setProperty("--sub-size", Math.max(13, Math.round(stage.clientHeight * 0.052 * (SUB_SCALE[S.subSize] || 1))) + "px"); pgsShown = -2; }
 try { new ResizeObserver(sizeSubs).observe(stage); } catch { sizeSubs(); }
 
@@ -2097,38 +2122,59 @@ if (N && N.onSubData) {
 }
 function subPass(opts, onData){ return new Promise(res => { const id = ++subSeq; subJobs.set(id, { data: onData, end: (code, msg) => res({ code, msg }) }); N.subStart({ id, ...opts }); }); }
 function ensureSubLoaded(e){ if (e && e.native && !e.started) loadSubNative(e); }
-async function loadSubNative(e){
-  e.started = true; e.status = "loading"; renderMenuIfOpen();
-  const me = cur, inp = nativeInput(); if (!inp) return;
+// Built-in subtitles are read by the desktop app's ffmpeg. Reading starts where you are, and a jump
+// to a part that hasn't been read yet starts another reader there, so subtitles show up straight away.
+function loadSubNative(e){
+  e.started = true; e.status = "loading"; e.seen = new Set(); e.cover = []; e.active = 0; e.failed = null;
+  renderMenuIfOpen();
   const here = Math.max(0, (v.currentTime || 0) - 15);
-  const passes = here > 20 ? [{ start: here, dur: 0 }, { start: 0, dur: here + 20 }] : [{ start: 0, dur: 0 }];
-  const seen = new Set();
-  const take = list => { for (const c of list) { const k = c.s.toFixed(2) + "|" + c.text; if (seen.has(k)) continue; seen.add(k); pushCue(e, c.s, c.e, c.text, c.top); } };
-  let failed = null;
-  for (const ps of passes) {
+  if (here > 20) { subRunPass(e, here, 0); subRunPass(e, 0, here + 20); }
+  else subRunPass(e, 0, 0);
+}
+function subRunPass(e, start, dur){
+  const me = cur, inp = nativeInput(); if (!inp) return;
+  const cov = { s: start, t: start, end: dur ? start + dur : Infinity, done: false };
+  e.cover.push(cov); e.active++;
+  const take = list => {
+    for (const c of list) {
+      cov.t = Math.max(cov.t, c.s);
+      const k = c.s.toFixed(2) + "|" + c.text; if (e.seen.has(k)) continue; e.seen.add(k);
+      pushCue(e, c.s, c.e, c.text, c.top);
+    }
+  };
+  // each reader gets its own picture-subtitle parser, since the stream is stateful
+  const pgs = e.pgs ? new PgsParser((pts, w, h, items) => { cov.t = Math.max(cov.t, pts); pgsStore(e, pts, w, h, items); }) : null;
+  let rest = "", lastPaint = 0;
+  const dec = new TextDecoder();
+  subPass({ input: inp, track: e.si, start, dur, format: pgs ? "sup" : "webvtt" }, chunk => {
     if (cur !== me) return;
-    let rest = "", lastPaint = 0;
-    const dec = new TextDecoder(), pgs = e.pgs ? e.pgs.parser : null;
-    const r = await subPass({ input: inp, track: e.si, start: ps.start, dur: ps.dur, format: pgs ? "sup" : "webvtt" }, chunk => {
-      if (cur !== me) return;
-      if (pgs) { pgs.feedSup(chunk); if (subs[activeSub] === e) pgsKick(); }
-      else {
-        rest += dec.decode(chunk, { stream: true });
-        const cut = rest.lastIndexOf("\n\n"); if (cut < 0) return;
-        take(parseSrtVtt(rest.slice(0, cut))); rest = rest.slice(cut + 2);
-        if (subs[activeSub] === e) renderCues();
-      }
-      if (performance.now() - lastPaint > 400) { lastPaint = performance.now(); renderMenuIfOpen(); }
-    });
+    if (pgs) { pgs.feedSup(chunk); if (subs[activeSub] === e) pgsKick(); }
+    else {
+      rest += dec.decode(chunk, { stream: true });
+      const cut = rest.lastIndexOf("\n\n"); if (cut < 0) return;
+      take(parseSrtVtt(rest.slice(0, cut))); rest = rest.slice(cut + 2);
+      if (subs[activeSub] === e) renderCues();
+    }
+    if (performance.now() - lastPaint > 400) { lastPaint = performance.now(); renderMenuIfOpen(); }
+  }).then(r => {
     if (cur !== me) return;
     if (!pgs && rest.trim()) take(parseSrtVtt(rest + "\n\n"));
-    if (r.code !== 0 && r.code !== null) failed = r.msg || "ffmpeg error";
-  }
-  e.lastOpen = null;
-  e.status = e.count ? "ready" : failed ? "error" : "empty";
-  if (subs[activeSub] === e) { renderCues(); pgsKick(); }
-  renderMenuIfOpen(); renderRailIfInfo();
+    if (r.code !== 0 && r.code !== null) e.failed = r.msg || "ffmpeg error";
+    cov.done = true; cov.t = cov.end; e.active--;
+    if (e.active > 0) return;
+    e.lastOpen = null;
+    e.status = e.count ? "ready" : e.failed ? "error" : "empty";
+    if (subs[activeSub] === e) { renderCues(); pgsKick(); }
+    renderMenuIfOpen(); renderRailIfInfo();
+  });
 }
+// Called after a jump: if no reader has reached (or is about to reach) this point, start one here.
+function subEnsureAt(e, t){
+  if (!e || !e.native || !e.started || e.status !== "loading" || !e.cover) return;
+  const covered = e.cover.some(c => c.s <= t + 1 && (c.done ? c.end >= t : c.t >= t - 20));
+  if (!covered && e.active < 4) subRunPass(e, Math.max(0, t - 10), 0);
+}
+v.addEventListener("seeked", () => { const e = subs[activeSub]; if (e) subEnsureAt(e, v.currentTime); });
 
 /* ---- subtitle font: Netflix Sans when available ---- */
 function fontInstalled(name){
@@ -2169,8 +2215,118 @@ $("#subFontInput").onchange = async e => {
   }
 };
 $("#subFontReset").onclick = () => { try { localStorage.removeItem("crave:subfont"); } catch {} applySubFont(); toast("Subtitle font reset"); };
+/* ---- subtitle style ---- */
+const SUB_DEFAULT = { color: "#ffffff", edge: "shadow", bg: "none", bgColor: "#000000", bgOpacity: 60 };
+const subSt = () => Object.assign({}, SUB_DEFAULT, S.subStyle || {});
+const rgba = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; };
+const SHADOWS = {
+  shadow: "0 0 .08em #000,0 0 .08em #000,0 .04em .12em #000,0 0 .35em rgba(0,0,0,.55)",
+  outline: ".06em 0 #000,-.06em 0 #000,0 .06em #000,0 -.06em #000,.045em .045em #000,-.045em .045em #000,.045em -.045em #000,-.045em -.045em #000",
+  none: "none"
+};
+function applySubStyle(){
+  const st = subSt(), r = document.documentElement.style, a = st.bgOpacity / 100;
+  r.setProperty("--sub-color", st.color);
+  r.setProperty("--sub-shadow", st.bg !== "none" && st.edge === "shadow" && a > .5 ? "none" : SHADOWS[st.edge] || SHADOWS.shadow);
+  r.setProperty("--sub-bg", st.bg === "line" ? rgba(st.bgColor, a) : "transparent");
+  r.setProperty("--sub-band-bg", rgba(st.bgColor, a));
+  stage.classList.toggle("sub-band", st.bg === "band");
+  $("#subPreview").parentElement.classList.toggle("sub-band", st.bg === "band");
+  $("#ssColor").value = st.color; $("#ssEdge").value = st.edge; $("#ssBg").value = st.bg;
+  $("#ssBgColor").value = st.bgColor; $("#ssBgOpacity").value = st.bgOpacity; $("#ssBgOpacityLbl").textContent = st.bgOpacity + "%";
+  $("#ssBgColor").disabled = $("#ssBgOpacity").disabled = st.bg === "none";
+  $("#subPreview").style.fontSize = Math.round(22 * (SUB_SCALE[S.subSize] || 1)) + "px";
+}
+function setSubStyle(patch){ S.subStyle = Object.assign(subSt(), patch); saveSettings(); applySubStyle(); }
+$("#ssColor").onchange = e => setSubStyle({ color: e.target.value });
+$("#ssEdge").onchange = e => setSubStyle({ edge: e.target.value });
+$("#ssBg").onchange = e => setSubStyle({ bg: e.target.value });
+$("#ssBgColor").oninput = e => setSubStyle({ bgColor: e.target.value });
+$("#ssBgOpacity").oninput = e => setSubStyle({ bgOpacity: +e.target.value });
+$("#ssReset").onclick = () => { S.subStyle = Object.assign({}, SUB_DEFAULT); S.subSize = "medium"; $("#setSubSize").value = "medium"; saveSettings(); applySubStyle(); sizeSubs(); toast("Subtitle style reset"); };
+applySubStyle();
+
+// Draws whatever subtitle is showing onto a full-size frame (for screenshots).
+async function drawSubsOnto(c){
+  const e = subs[activeSub]; if (!e) return false;
+  const ctx = c.getContext("2d"), W = c.width, H = c.height;
+  if (e.pgs) {
+    const D = e.pgs.displays, t = v.currentTime - (e.offset || 0);
+    let idx = -1; for (let i = 0; i < D.length && D[i].pts <= t + 0.001; i++) idx = i;
+    const d = D[idx]; if (!d || !d.items.length) return false;
+    const sx = W / d.w, sy = H / d.h;
+    ctx.imageSmoothingQuality = "high";
+    for (const it of d.items) ctx.drawImage(pgsBitmap(it), it.x * sx, it.y * sy, it.w * sx, it.h * sy);
+    return true;
+  }
+  if (!e.tt || !e.tt.activeCues || !e.tt.activeCues.length) return false;
+  const st = subSt(), px = Math.max(14, Math.round(H * 0.052 * (SUB_SCALE[S.subSize] || 1)));
+  const family = getComputedStyle(document.documentElement).getPropertyValue("--sub-font").trim() || "sans-serif";
+  const fontFor = r => `${r.i ? "italic " : ""}${r.b ? 700 : 500} ${px}px ${family}`;
+  try { await Promise.all([document.fonts.load(fontFor({})), document.fonts.load(fontFor({ i: 1 }))]); } catch {}
+  // cue text → lines of styled runs, wrapped to 88% of the width
+  const toLines = text => {
+    const out = []; let st2 = { i: 0, b: 0 };
+    for (const raw of String(text).replace(/&nbsp;/g, " ").split("\n")) {
+      const runs = []; let rest = raw;
+      while (rest.length) {
+        const m = rest.match(/<(\/?)([ibu])>/i);
+        const chunk = m ? rest.slice(0, m.index) : rest;
+        if (chunk) runs.push({ text: chunk.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&"), ...st2 });
+        if (!m) break;
+        const k = m[2].toLowerCase(); if (k !== "u") st2 = { ...st2, [k]: m[1] ? 0 : 1 };
+        rest = rest.slice(m.index + m[0].length);
+      }
+      // word wrap
+      let line = [], width = 0;
+      const maxW = W * 0.88;
+      for (const r of runs) for (const word of r.text.split(/(\s+)/)) {
+        if (!word) continue;
+        ctx.font = fontFor(r); const w = ctx.measureText(word).width;
+        if (width + w > maxW && width > 0 && /\S/.test(word)) { out.push(line); line = []; width = 0; }
+        if (!line.length && !/\S/.test(word)) continue;
+        line.push({ ...r, text: word, w }); width += w;
+      }
+      if (line.length) out.push(line);
+    }
+    return out;
+  };
+  const groups = { bottom: [], top: [] };
+  for (const cue of [...e.tt.activeCues].sort((a, b) => a.startTime - b.startTime)) groups[cue.top ? "top" : "bottom"].push(...toLines(cue.text));
+  const lh = px * 1.22, padX = px * 0.3, padY = px * 0.04, a = st.bgOpacity / 100;
+  const drawBlock = (lines, topY) => {
+    if (!lines.length) return;
+    const widths = lines.map(l => l.reduce((s2, r) => s2 + r.w, 0));
+    if (st.bg === "band" && a > 0) { ctx.fillStyle = rgba(st.bgColor, a); ctx.fillRect(0, topY - px * 0.18, W, lines.length * lh + px * 0.36); }
+    lines.forEach((l, i) => {
+      const y = topY + i * lh, x0 = (W - widths[i]) / 2;
+      if (st.bg === "line" && a > 0) {
+        ctx.fillStyle = rgba(st.bgColor, a);
+        const rx = x0 - padX, ry = y - padY, rw = widths[i] + padX * 2, rh = lh + padY * 2 - 1, rad = px * 0.12;
+        ctx.beginPath(); ctx.roundRect ? ctx.roundRect(rx, ry, rw, rh, rad) : ctx.rect(rx, ry, rw, rh); ctx.fill();
+      }
+      let x = x0;
+      for (const r of l) {
+        ctx.font = fontFor(r); ctx.textBaseline = "middle";
+        const cy = y + lh / 2;
+        const soft = st.edge === "shadow" && !(st.bg !== "none" && a > .5);
+        if (soft) {
+          ctx.save(); ctx.shadowColor = "rgba(0,0,0,.6)"; ctx.shadowBlur = px * 0.35; ctx.fillStyle = "rgba(0,0,0,.6)"; ctx.fillText(r.text, x, cy); ctx.restore();
+          ctx.save(); ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(0,0,0,.85)"; ctx.lineWidth = px * 0.1; ctx.strokeText(r.text, x, cy + px * 0.02); ctx.restore();
+        } else if (st.edge === "outline") {
+          ctx.save(); ctx.lineJoin = "round"; ctx.strokeStyle = "#000"; ctx.lineWidth = px * 0.13; ctx.strokeText(r.text, x, cy); ctx.restore();
+        }
+        ctx.fillStyle = st.color; ctx.fillText(r.text, x, cy);
+        x += r.w;
+      }
+    });
+  };
+  drawBlock(groups.bottom, H * 0.93 - groups.bottom.length * lh);
+  drawBlock(groups.top, H * 0.07);
+  return true;
+}
 $("#setSubSize").value = S.subSize || "medium";
-$("#setSubSize").onchange = e => { S.subSize = e.target.value; saveSettings(); sizeSubs(); };
+$("#setSubSize").onchange = e => { S.subSize = e.target.value; saveSettings(); sizeSubs(); applySubStyle(); };
 applySubFont();
 
 /* ================= audio: English first, any format plays instantly ================= */
@@ -2558,7 +2714,7 @@ async function exportClip(){
     if (sub.pgs && sub.native) subOpt = { kind: "pgs", track: sub.si };
     else if (sub.tt) { const srt = clipSrt(sub, clip.a, clip.b); if (srt) subOpt = { kind: "text", srt }; }
   }
-  const size = Math.round(16 * ({ small: .82, medium: 1, large: 1.22 }[S.subSize] || 1));
+  const size = Math.round(16 * (SUB_SCALE[S.subSize] || 1));
   const opts = {
     input: inp, start: clip.a, end: clip.b, name: cur.name, format: clip.format, mode: clip.mode,
     height: clip.format === "mp4" ? clip.height : 0, width: clip.width, fps: 15,
@@ -2566,7 +2722,7 @@ async function exportClip(){
     audioLang: (() => { const i = clipAudioIndex(), A = P.audio || []; return i != null && A[i] ? langCode(A[i].lang) && A[i].lang : ""; })(),
     vcodec: vt ? vt.codec : "", hdr: (vt && vt.hdr) ? (/HLG/.test(vt.hdr) ? "HLG" : "HDR10") : "", keepHdr: clip.keepHdr,
     look: !srcHDR() && hdrActive() && clip.look && clip.format !== "m4a" ? hdrLevel() : 0,
-    sub: subOpt, subStyle: { font: fontInstalled("Netflix Sans") ? "Netflix Sans" : "Arial", size }
+    sub: subOpt, subStyle: Object.assign({ font: fontInstalled("Netflix Sans") ? "Netflix Sans" : "Arial", size }, subSt())
   };
   const me = cur;
   clip.busy = true; clip.p = 0; renderClip();
@@ -2635,11 +2791,12 @@ function renderMenu(){
       h += `<button class="mi" data-sub="${i}" ${usable(s) ? "" : "disabled"}>${ck(i === activeSub)}<span><span class="a">${esc(s.label)}</span><span class="b">${esc(st)}</span></span></button>`;
     });
     if (!subs.length) h += `<p class="note">${cur && cur.probing ? "Checking this file for built-in subtitles…" : cur && cur.kind === "file" ? "This file has no built-in subtitles." : "Built-in subtitles are read from files on your computer. For links, load a subtitle file."}</p>`;
-    h += `<div class="sep"></div><button class="mi" data-act="load">${ck(false)}<span><span class="a">Load subtitle file…</span><span class="b">.srt, .vtt, .ass or .ssa</span></span></button>`;
+    h += `<div class="sep"></div><button class="mi" data-act="style">${ck(false)}<span><span class="a">Subtitle style…</span><span class="b">Colour, background, opacity, size</span></span></button><button class="mi" data-act="load">${ck(false)}<span><span class="a">Load subtitle file…</span><span class="b">.srt, .vtt, .ass or .ssa</span></span></button>`;
     if (activeSub >= 0) h += `<div class="delay"><span style="flex:1">Timing <span class="mono" style="color:var(--honey)">${fmtOff(subs[activeSub].offset)}</span></span><button class="btn sm" data-d="-0.5">Earlier</button><button class="btn sm" data-d="0.5">Later</button></div><p class="note" style="padding-top:0">G and H nudge by 0.1 s.</p>`;
     m.innerHTML = h;
     m.querySelectorAll("[data-sub]").forEach(b => b.onclick = () => selectSub(+b.dataset.sub));
     m.querySelector('[data-act="load"]').onclick = () => { closeMenu(); $("#subInput").click(); };
+    m.querySelector('[data-act="style"]').onclick = () => { closeMenu(); if (!v.paused) v.pause(); switchView("settings"); $("#subStyleCard").scrollIntoView({ behavior: "smooth", block: "start" }); };
     m.querySelectorAll("[data-d]").forEach(b => b.onclick = () => shiftSub(+b.dataset.d));
   } else if (menuKind === "hdr") {
     renderHdrMenu(m);
