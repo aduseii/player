@@ -574,7 +574,7 @@ async function osSearch(c, q){
     const a = d.attributes, f = a.feature_details || {};
     return { provider: "opensubtitles", id: String(a.files[0].file_id), release: a.release || a.files[0].file_name || f.title || "", file: a.files[0].file_name || "",
       lang: a.language || q.lang, downloads: a.download_count || 0, hi: !!a.hearing_impaired, exact: !!a.moviehash_match, ai: !!(a.ai_translated || a.machine_translated),
-      title: f.movie_name || f.title || "", year: f.year || "", season: f.season_number || null, episode: f.episode_number || null, uploader: a.uploader && a.uploader.name || "" };
+      title: f.movie_name || f.title || "", show: f.parent_title || "", year: f.year || "", season: f.season_number || null, episode: f.episode_number || null, uploader: a.uploader && a.uploader.name || "" };
   });
 }
 async function subdlSearch(c, q){
@@ -615,7 +615,7 @@ function pickFromZip(files, q){
   }
   return names.sort((a, b) => (/\.srt$/i.test(b) - /\.srt$/i.test(a)) || files[b].length - files[a].length)[0];
 }
-ipcMain.handle("subs-download", async (_e, { provider, id, lang, season, episode, saveNextTo }) => {
+async function subsDownloadNow({ provider, id, lang, season, episode, saveNextTo }){
   const c = readCreds();
   let name = "subtitle.srt", data = null;
   if (provider === "opensubtitles") {
@@ -654,6 +654,65 @@ ipcMain.handle("subs-download", async (_e, { provider, id, lang, season, episode
     } catch {}
   }
   return { name, data: new Uint8Array(data), savedTo, osRemaining: osSession && osSession.remaining };
+}
+ipcMain.handle("subs-download", (_e, o) => subsDownloadNow(o));
+
+// The OpenSubtitles hash of a streamed file, from two small range requests (first and last 64 KB).
+async function urlMovieHash(u){
+  const get = async range => {
+    const r = await fetch(u, { headers: { Range: range, "User-Agent": NET_UA }, redirect: "follow", signal: AbortSignal.timeout(20000) });
+    if (r.status !== 206) throw new Error("no range support (" + r.status + ")");
+    const total = +String(r.headers.get("content-range") || "").split("/")[1] || 0;
+    return { buf: Buffer.from(await r.arrayBuffer()), total };
+  };
+  const a = await get("bytes=0-65535"), size = a.total;
+  if (!size || size < 131072 || a.buf.length < 65536) return null;
+  const b = await get(`bytes=${size - 65536}-${size - 1}`);
+  if (b.buf.length < 65536) return null;
+  let sum = BigInt(size); const M = (1n << 64n) - 1n;
+  for (const buf of [a.buf, b.buf]) for (let i = 0; i < 65536; i += 8) sum = (sum + buf.readBigUInt64LE(i)) & M;
+  return sum.toString(16).padStart(16, "0");
+}
+// English subtitles for whatever is playing, with no questions asked:
+// 1. identify the video by its hash on OpenSubtitles (searching is free) to learn the show, season and episode,
+// 2. get them from SubDL (no daily limit) using that, or the file name,
+// 3. only if SubDL has nothing, use the exact OpenSubtitles match (1 of the daily downloads).
+const simpleWords = t => String(t || "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter(w => w.length > 2 && !/^(the|and)$/.test(w));
+ipcMain.handle("subs-auto-en", async (_e, { input, fileName, guess = {}, saveNextTo }) => {
+  const c = readCreds(), log = [];
+  if (!c.subdl && !c.osKey) return { none: true, reason: "no subtitle accounts" };
+  let hash = null;
+  try { hash = /^https?:/i.test(input) ? await urlMovieHash(input) : input ? await movieHash(input) : null; } catch (e) { log.push("hash: " + e.message); }
+  let id = null, exact = [];
+  if (hash && c.osKey) {
+    try {
+      exact = (await osSearch(c, { hash, lang: "en" })).filter(x => x.exact && !x.ai);
+      const f = exact[0];
+      if (f) id = { title: f.show || f.title, year: f.year, season: f.season || "", episode: f.episode || "" };
+    } catch (e) { log.push("OpenSubtitles: " + e.message); }
+  }
+  const tries = [];
+  if (id && id.title) tries.push({ query: id.title, year: id.year, season: id.season, episode: id.episode, lang: "en" });
+  if (guess.title && (guess.season || guess.year)) tries.push({ query: guess.title, year: guess.year, season: guess.season || "", episode: guess.episode || "", lang: "en" });
+  if (fileName) tries.push({ fileName, lang: "en", strict: true });
+  if (c.subdl) for (const q of tries) {
+    try {
+      let hits = (await subdlSearch(c, q)).filter(x => !x.ai);
+      const ep = q.episode || (id && id.episode);
+      if (ep) hits = hits.filter(x => !x.episode || +x.episode === +ep);
+      if (q.strict && guess.title) { const want = simpleWords(guess.title); hits = hits.filter(x => !want.length || simpleWords(x.title + " " + x.release).some(w => want.includes(w))); }
+      hits.sort((a, b) => (+a.hi - +b.hi) || (+a.fullSeason - +b.fullSeason) || (b.downloads - a.downloads));
+      if (!hits.length) continue;
+      const x = hits[0];
+      const d = await subsDownloadNow({ provider: "subdl", id: x.id, lang: "en", season: x.season || q.season || (id && id.season), episode: x.episode || ep, saveNextTo });
+      return { ...d, source: "SubDL", release: x.release || x.title, identified: id };
+    } catch (e) { log.push("SubDL: " + e.message); }
+  }
+  if (exact.length) {
+    try { const d = await subsDownloadNow({ provider: "opensubtitles", id: exact[0].id, lang: "en", saveNextTo }); return { ...d, source: "OpenSubtitles (exact match)", release: exact[0].release, identified: id }; }
+    catch (e) { log.push("OpenSubtitles download: " + e.message); }
+  }
+  return { none: true, identified: id, reason: log.join("; ") || "no English subtitles found" };
 });
 // Subtitle files next to the video (Movie.srt, Movie.en.srt, Subs/…), like VLC.
 ipcMain.handle("sidecar-subs", async (_e, videoPath) => {
