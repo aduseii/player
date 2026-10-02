@@ -225,11 +225,21 @@ function parseProbe(text){
     if (m) {
       const s = { index: +m[1], lang: m[2] || "und", codec: m[4], title: "", def: /\(default\)/.test(l), forced: /\(forced\)/.test(l), sdh: /\(hearing impaired\)/.test(l) };
       if (m[3] === "Audio") { const ch = l.match(/, (mono|stereo|2\.1|quad|5\.0|5\.1|6\.1|7\.1|\d+ channels)/); s.layout = ch ? ch[1] : ""; res.audio.push(s); }
-      else if (m[3] === "Video") { if (!/attached pic/.test(l)) res.video.push(s); }
+      else if (m[3] === "Video") {
+        if (!/attached pic/.test(l)) {
+          const wh = l.match(/, (\d{2,5})x(\d{2,5})/);
+          if (wh) { s.w = +wh[1]; s.h = +wh[2]; }
+          s.tenbit = /p(10|12)(le|be)?\b/.test(l);
+          s.hdr = /smpte2084/.test(l) ? "HDR10" : /arib-std-b67/.test(l) ? "HLG" : "";
+          res.video.push(s);
+        }
+      }
       else res.subs.push(s);
       last = s; continue;
     }
     if (/^\s*Stream #/.test(l)) { last = null; continue; }
+    if (/DOVI configuration record/.test(l) && res.video.length) { const vs = res.video[res.video.length - 1]; vs.hdr = "Dolby Vision" + (vs.hdr === "HDR10" ? " / HDR10" : ""); }
+    if (/Mastering Display Metadata|Content Light Level/.test(l) && res.video.length && !res.video[res.video.length - 1].hdr) res.video[res.video.length - 1].hdr = "HDR10";
     const t = l.match(/^\s{4,}title\s*:\s*(.+)$/);
     if (t && last) last.title = t[1].trim();
   }
@@ -285,6 +295,125 @@ ipcMain.handle("sub-start", (e, { id, input, track, start, dur, format }) => {
 });
 ipcMain.handle("sub-stop-all", () => { for (const p of sstreams.values()) { try { p.kill(); } catch {} } sstreams.clear(); });
 
+/* ---------- clips: cut a part of what's playing and save it ---------- */
+let clipProc = null, clipCancelled = false;
+const clipDir = () => path.join(app.getPath("videos"), "Crave Clips");
+const assColour = hex => "&H00" + hex.slice(4, 6) + hex.slice(2, 4) + hex.slice(0, 2);
+function clipName(base, start, end, ext){
+  const t = s => { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + "-" : "") + String(m).padStart(h ? 2 : 1, "0") + "-" + String(x).padStart(2, "0"); };
+  const clean = String(base || "Clip").replace(/\.[a-z0-9]{2,4}$/i, "").replace(/[<>:"/\\|?*\x00-\x1f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || "Clip";
+  const dir = clipDir(); fs.mkdirSync(dir, { recursive: true });
+  let p = path.join(dir, `${clean} ${t(start)} to ${t(end)}.${ext}`), n = 2;
+  while (fs.existsSync(p)) p = path.join(dir, `${clean} ${t(start)} to ${t(end)} (${n++}).${ext}`);
+  return p;
+}
+// Builds the ffmpeg command for one export. Kept separate so it can be retried in a simpler form.
+function clipArgs(o, out, { copy, withSubs }){
+  const dur = Math.max(0.1, o.end - o.start);
+  const a = ["-hide_banner", "-nostdin", "-y", "-ss", o.start.toFixed(3), "-i", o.input, "-t", dur.toFixed(3)];
+  const audio = o.audioTrack != null && o.audioTrack >= 0 ? `0:a:${o.audioTrack}` : null;
+  if (o.format === "m4a") {
+    if (!audio) throw new Error("this video has no sound to save");
+    return a.concat(["-map", audio, "-vn", "-sn", "-dn", "-c:a", "aac", "-b:a", "256k"], o.audioLang ? ["-metadata:s:a:0", "language=" + o.audioLang] : [], ["-movflags", "+faststart", "-progress", "pipe:1", "-nostats", out]);
+  }
+  // Video filters, in order: HDR → SDR (unless keeping HDR), subtitles, look, size.
+  const vf = [];
+  const keepHdr = o.hdr && o.keepHdr && o.format === "mp4";
+  if (o.hdr && !keepHdr) vf.push("zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p");
+  let complex = null;
+  if (withSubs && o.sub && o.sub.kind === "text") {
+    const st = o.subStyle || {};
+    const style = [`FontName=${st.font || "Arial"}`, `FontSize=${st.size || 22}`, `PrimaryColour=${assColour("ffffff")}`, "OutlineColour=&H00000000", "BackColour=&H80000000", "BorderStyle=1", "Outline=1.2", "Shadow=0.6", "MarginV=28"].join(",");
+    vf.push(`subtitles=${o.subFile}:force_style='${style}'`);
+  }
+  if (o.look > 0) { const k = o.look; vf.push(`eq=contrast=${(1 + 0.10 * k).toFixed(3)}:saturation=${(1 + 0.28 * k).toFixed(3)}:gamma=${(1 - 0.04 * k).toFixed(3)},unsharp=5:5:${(0.35 * k).toFixed(2)}:5:5:0`); }
+  if (o.format === "gif") vf.push(`fps=${o.fps || 15}`, `scale=${o.width || 640}:-2:flags=lanczos`);
+  else if (o.height) vf.push(`scale=-2:'min(${o.height},ih)':flags=lanczos`);
+  if (withSubs && o.sub && o.sub.kind === "pgs") {
+    // Picture subtitles are drawn over the full-size frame, then the rest of the chain runs.
+    const pre = o.hdr && !keepHdr ? vf.shift() + "," : "";
+    complex = `[0:v:0]${pre ? pre.slice(0, -1) : "null"}[base];[base][0:s:${o.sub.track}]overlay=(W-w)/2:(H-h)/2:eof_action=pass${vf.length ? "," + vf.join(",") : ""}`;
+  }
+  if (o.format === "gif") {
+    const chain = complex ? complex.replace(/$/, ",split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4[out]")
+      : `[0:v:0]${vf.join(",")},split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4[out]`;
+    return a.concat(["-filter_complex", chain, "-map", "[out]", "-loop", "0", "-progress", "pipe:1", "-nostats", out]);
+  }
+  const args = a.slice();
+  if (copy) {
+    args.push("-map", "0:v:0", "-c:v", "copy");
+    if (/hevc|h265/i.test(o.vcodec || "")) args.push("-tag:v", "hvc1");
+  } else {
+    if (complex) args.push("-filter_complex", complex + "[v]", "-map", "[v]");
+    else { args.push("-map", "0:v:0"); if (vf.length) args.push("-vf", vf.join(",")); }
+    if (keepHdr) args.push("-c:v", "libx265", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p10le", "-tag:v", "hvc1",
+      "-x265-params", `colorprim=bt2020:transfer=${o.hdr === "HLG" ? "arib-std-b67" : "smpte2084"}:colormatrix=bt2020nc:hdr10=1:log-level=error`);
+    else args.push("-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p");
+  }
+  if (audio) { args.push("-map", audio, "-c:a", "aac", "-b:a", "192k", "-ac", "2"); if (o.audioLang) args.push("-metadata:s:a:0", "language=" + o.audioLang); }
+  args.push("-sn", "-dn", "-map_metadata", "-1", "-avoid_negative_ts", "make_zero", "-movflags", "+faststart", "-progress", "pipe:1", "-nostats", out);
+  return args;
+}
+function runClip(args, dur, onProgress){
+  return new Promise((resolve, reject) => {
+    const p = spawn(ffmpegPath(), args, { windowsHide: true, cwd: TMP });
+    clipProc = p;
+    let err = "", buf = "";
+    p.stderr.on("data", d => { err = (err + d).slice(-3000); });
+    p.stdout.on("data", d => {
+      buf += d; const lines = buf.split("\n"); buf = lines.pop();
+      for (const l of lines) { const m = l.match(/^out_time_(?:us|ms)=(\d+)/); if (m) onProgress(Math.min(0.99, +m[1] / 1e6 / dur)); }
+    });
+    p.on("error", reject);
+    p.on("close", code => {
+      if (clipProc === p) clipProc = null;
+      if (code === 0) resolve();
+      else reject(new Error(clipCancelled ? "cancelled" : (err.trim().split("\n").filter(x => !/^\s*$/.test(x)).pop() || "ffmpeg stopped with code " + code)));
+    });
+  });
+}
+ipcMain.handle("clip-export", async (e, o) => {
+  fs.mkdirSync(TMP, { recursive: true });
+  clipCancelled = false;
+  const ext = o.format === "gif" ? "gif" : o.format === "m4a" ? "m4a" : "mp4";
+  const out = clipName(o.name, o.start, o.end, ext);
+  const dur = Math.max(0.1, o.end - o.start);
+  const send = p => { if (!e.sender.isDestroyed()) e.sender.send("clip-progress", p); };
+  if (o.sub && o.sub.kind === "text") {
+    o.subFile = `clip-subs-${Date.now()}.srt`;
+    fs.writeFileSync(path.join(TMP, o.subFile), o.sub.srt, "utf8");
+  }
+  // Fast mode copies the picture without re-encoding; it falls back to a full encode if the format won't allow it.
+  const attempts = [];
+  const canCopy = o.mode === "fast" && o.format === "mp4" && !o.sub && !o.look && !o.height && !(o.hdr && !o.keepHdr);
+  if (canCopy) attempts.push({ copy: true, withSubs: false });
+  attempts.push({ copy: false, withSubs: !!o.sub });
+  if (o.sub) attempts.push({ copy: false, withSubs: false, note: "Subtitles couldn't be added, so this clip has none." });
+  let lastErr = null;
+  try {
+    for (const at of attempts) {
+      try {
+        await runClip(clipArgs(o, out, at), dur, send);
+        const size = fs.statSync(out).size;
+        if (size < 1024) throw new Error("the clip came out empty");
+        send(1);
+        return { path: out, size, name: path.basename(out), folder: clipDir(), note: at.note || "", fast: !!at.copy };
+      } catch (err) {
+        lastErr = err; try { fs.unlinkSync(out); } catch {}
+        if (clipCancelled) throw err;
+      }
+    }
+    throw lastErr;
+  } finally {
+    if (o.subFile) { try { fs.unlinkSync(path.join(TMP, o.subFile)); } catch {} }
+  }
+});
+ipcMain.handle("clip-cancel", () => { clipCancelled = true; if (clipProc) clipProc.kill(); });
+ipcMain.handle("show-item", (_e, p) => { if (fs.existsSync(p)) { shell.showItemInFolder(p); return true; } return false; });
+ipcMain.handle("open-item", async (_e, p) => { if (!fs.existsSync(p)) return false; await shell.openPath(p); return true; });
+ipcMain.handle("open-clips-folder", () => { fs.mkdirSync(clipDir(), { recursive: true }); return shell.openPath(clipDir()); });
+ipcMain.handle("items-exist", (_e, list) => list.map(p => { try { return fs.statSync(p).isFile(); } catch { return false; } }));
+
 /* ---------- self-updating from GitHub Releases ---------- */
 const pkg = require("./package.json");
 const PORTABLE = !!process.env.PORTABLE_EXECUTABLE_DIR;
@@ -326,6 +455,7 @@ app.whenReady().then(initUpdater);
 app.on("window-all-closed", () => app.quit());
 app.on("will-quit", () => {
   try { stopAstreams(); for (const p of sstreams.values()) p.kill(); } catch {}
+  try { if (clipProc) { clipCancelled = true; clipProc.kill(); } } catch {}
   try { if (ffProc) ffProc.kill(); } catch {}
   try { if (tclient) tclient.destroy(); } catch {}
   for (const h of fds.values()) h.close().catch(() => {});

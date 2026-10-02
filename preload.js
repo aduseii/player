@@ -35,5 +35,15 @@ contextBridge.exposeInMainWorld("craveNative", {
   subStart: opts => ipcRenderer.invoke("sub-start", opts),
   subStopAll: () => ipcRenderer.invoke("sub-stop-all"),
   onSubData: cb => ipcRenderer.on("sub-data", (_e, id, d) => cb(id, d)),
-  onSubEnd: cb => ipcRenderer.on("sub-end", (_e, id, code, msg) => cb(id, code, msg))
+  onSubEnd: cb => ipcRenderer.on("sub-end", (_e, id, code, msg) => cb(id, code, msg)),
+  clipExport: (opts, onProgress) => {
+    const h = (_e, p) => onProgress && onProgress(p);
+    ipcRenderer.on("clip-progress", h);
+    return ipcRenderer.invoke("clip-export", opts).finally(() => ipcRenderer.removeListener("clip-progress", h));
+  },
+  clipCancel: () => ipcRenderer.invoke("clip-cancel"),
+  showItem: p => ipcRenderer.invoke("show-item", p),
+  openItem: p => ipcRenderer.invoke("open-item", p),
+  openClipsFolder: () => ipcRenderer.invoke("open-clips-folder"),
+  itemsExist: list => ipcRenderer.invoke("items-exist", list)
 });

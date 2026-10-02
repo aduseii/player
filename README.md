@@ -38,5 +38,6 @@ You need [Node.js](https://nodejs.org) 20 or newer.
 
 - The installer isn't code-signed, so Windows SmartScreen warns on first install ("More info → Run anyway"). Updates install without that prompt.
 - The portable exe can't replace itself; it shows a download link when a new version is out.
-- Screenshots save to `Pictures\Crave`. Torrent downloads are temporary and cleared when Crave closes.
+- Screenshots save to `Pictures\Crave` and clips to `Videos\Crave Clips`. Torrent downloads are temporary and cleared when Crave closes.
+- HDR video (HDR10, HLG, Dolby Vision) plays in true HDR when Windows HDR is on. HDR mode (Natural / Vivid) is a live GPU enhancement for standard videos; on PCs without GPU acceleration it uses a lighter filter.
 - ffmpeg is GPL software by the FFmpeg developers; its license ships beside it as `ffmpeg-LICENSE.txt`.
