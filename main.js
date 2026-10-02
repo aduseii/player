@@ -67,7 +67,7 @@ function start(){
 
   // Screenshot downloads land in Pictures\Crave without a dialog.
   session.defaultSession.on("will-download", (_e, item) => {
-    const dir = path.join(app.getPath("pictures"), "Crave");
+    const dir = folderFor("shots");
     fs.mkdirSync(dir, { recursive: true });
     const p = path.parse(item.getFilename());
     let target = path.join(dir, p.base), n = 1;
@@ -149,7 +149,28 @@ ipcMain.handle("read", async (_e, p, a, b) => {
   return buf.subarray(0, bytesRead);
 });
 ipcMain.handle("stat-path", (_e, p) => fileInfo(p));
-ipcMain.handle("open-shots-folder", () => { const dir = path.join(app.getPath("pictures"), "Crave"); fs.mkdirSync(dir, { recursive: true }); return shell.openPath(dir); });
+ipcMain.handle("open-shots-folder", () => { const dir = folderFor("shots"); fs.mkdirSync(dir, { recursive: true }); return shell.openPath(dir); });
+
+/* ---------- where screenshots and clips are saved (changeable in Settings) ---------- */
+const prefsFile = () => path.join(app.getPath("userData"), "folders.json");
+function readFolders(){ try { return JSON.parse(fs.readFileSync(prefsFile(), "utf8")); } catch { return {}; } }
+const defaultFolder = kind => kind === "clips" ? path.join(app.getPath("videos"), "Crave Clips") : path.join(app.getPath("pictures"), "Crave");
+function folderFor(kind){
+  const f = readFolders()[kind];
+  if (f) { try { fs.mkdirSync(f, { recursive: true }); fs.accessSync(f, fs.constants.W_OK); return f; } catch {} }  // gone or read-only → default
+  return defaultFolder(kind);
+}
+ipcMain.handle("folders-get", () => ({ shots: folderFor("shots"), clips: folderFor("clips"), shotsDefault: !readFolders().shots, clipsDefault: !readFolders().clips }));
+ipcMain.handle("folder-choose", async (_e, kind) => {
+  const { dialog } = require("electron");
+  const r = await dialog.showOpenDialog(win, { title: kind === "clips" ? "Choose where clips are saved" : "Choose where screenshots are saved", defaultPath: folderFor(kind), properties: ["openDirectory", "createDirectory", "promptToCreate"] });
+  if (r.canceled || !r.filePaths[0]) return null;
+  const f = readFolders(); f[kind] = r.filePaths[0];
+  fs.mkdirSync(path.dirname(prefsFile()), { recursive: true }); fs.writeFileSync(prefsFile(), JSON.stringify(f));
+  return folderFor(kind);
+});
+ipcMain.handle("folder-reset", (_e, kind) => { const f = readFolders(); delete f[kind]; fs.writeFileSync(prefsFile(), JSON.stringify(f)); return folderFor(kind); });
+ipcMain.handle("folder-open", (_e, kind) => { const d = folderFor(kind); fs.mkdirSync(d, { recursive: true }); return shell.openPath(d); });
 
 /* ---------- audio conversion with the bundled ffmpeg ---------- */
 function ffmpegPath(){
@@ -332,7 +353,7 @@ ipcMain.handle("sub-stop-all", () => { for (const p of sstreams.values()) { try 
 
 /* ---------- clips: cut a part of what's playing and save it ---------- */
 let clipProc = null, clipCancelled = false;
-const clipDir = () => path.join(app.getPath("videos"), "Crave Clips");
+const clipDir = () => folderFor("clips");
 const assColour = hex => "&H00" + hex.slice(4, 6) + hex.slice(2, 4) + hex.slice(0, 2);
 function clipName(base, start, end, ext){
   const t = s => { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + "-" : "") + String(m).padStart(h ? 2 : 1, "0") + "-" + String(x).padStart(2, "0"); };

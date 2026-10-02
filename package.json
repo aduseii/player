@@ -1,6 +1,6 @@
 {
   "name": "crave",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Crave video player",
   "main": "main.js",
   "scripts": {
