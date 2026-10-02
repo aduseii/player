@@ -867,7 +867,7 @@ dialog{background:rgba(24,26,44,.88);backdrop-filter:blur(30px) saturate(1.5)}
         <label class="switch"><input type="checkbox" id="setAutoDl"><i></i></label></div>
       <div class="set"><div class="d"><strong>Resume where you left off</strong><span>Reopening a link jumps back to your last position.</span></div>
         <label class="switch"><input type="checkbox" id="setResume"><i></i></label></div>
-      <div class="set"><div class="d"><strong>Turn on built-in subtitles</strong><span>Shows a file's own subtitles as soon as it opens, in your browser's language when the file has it.</span></div>
+      <div class="set"><div class="d"><strong>Turn on English subtitles</strong><span>Every video starts with English sound and English subtitles: the file's own, a subtitle file next to it, or a download from SubDL when the video has none.</span></div>
         <label class="switch"><input type="checkbox" id="setAutoSubs"><i></i></label></div>
       <div class="set" id="subStyleCard" style="display:block">
         <div class="d"><strong>Subtitle style</strong><span>Used on screen, in screenshots and in clips with burned-in subtitles.</span></div>
@@ -1878,6 +1878,9 @@ const chName = n => ({ 1:"Mono", 2:"Stereo", 3:"2.1", 6:"5.1", 7:"6.1", 8:"7.1" 
 const L3 = { eng:"en",spa:"es",fre:"fr",fra:"fr",ger:"de",deu:"de",ita:"it",por:"pt",rus:"ru",jpn:"ja",chi:"zh",zho:"zh",kor:"ko",ara:"ar",hin:"hi",dut:"nl",nld:"nl",swe:"sv",nor:"no",nob:"nb",dan:"da",fin:"fi",pol:"pl",tur:"tr",gre:"el",ell:"el",heb:"he",hun:"hu",cze:"cs",ces:"cs",rum:"ro",ron:"ro",tha:"th",vie:"vi",ind:"id",may:"ms",msa:"ms",ukr:"uk",per:"fa",fas:"fa",bul:"bg",hrv:"hr",srp:"sr",slo:"sk",slk:"sk",slv:"sl",cat:"ca",tam:"ta",tel:"te",ben:"bn",urd:"ur",tgl:"tl",est:"et",lav:"lv",lit:"lt",ice:"is",isl:"is",aka:"ak",twi:"tw",yor:"yo",hau:"ha",swa:"sw",amh:"am",zul:"zu",afr:"af",ibo:"ig",ewe:"ee" };
 let langDN; try { langDN = new Intl.DisplayNames(["en"], { type: "language" }); } catch {}
 function langCode(l){ if (!l || /^(und|mis|zxx|mul)$/i.test(l)) return ""; l = l.toLowerCase(); return L3[l] || l.split("-")[0]; }
+// English test that also reads track titles ("English", "ENG SDH") when the language tag is missing or "und".
+const EN_TITLE = /\b(english|eng|en-us|en-gb)\b/i;
+const isEnglish = (lang, ...titles) => { const c = langCode(lang); return c ? c === "en" : titles.some(x => EN_TITLE.test(String(x || ""))); };
 function langName(l){ const c = langCode(l); if (!c) return ""; try { const n = langDN && langDN.of(c); if (n && n.toLowerCase() !== c) return n; } catch {} return c.toUpperCase(); }
 function trackLabel(t, i){ const ln = langName(t.lang); const parts = [ln || "Track " + (i + 1)]; if (t.name && t.name !== ln) parts.push(t.name); return parts.join(" · "); }
 
@@ -2224,10 +2227,34 @@ async function addSubFile(f, opt = {}){
   renderMenuIfOpen(); renderRailIfInfo();
   return e;
 }
+// English only: full English first, then English SDH, then English picture subtitles. Never another language.
 function pickSub(list){
-  const ul = (navigator.language || "en").slice(0, 2).toLowerCase(), en = e => langCode(e.lang) === "en";
-  return list.find(e => !e.forced && en(e) && e.kind === "text" && !e.sdh) || list.find(e => !e.forced && en(e))
-    || list.find(e => !e.forced && langCode(e.lang) === ul) || list.find(e => !e.forced && e.def) || list.find(e => !e.forced) || list[0];
+  const en = e => isEnglish(e.lang, e.label, e.track && e.track.name);
+  const sdh = e => e.sdh || /\b(sdh|hi|cc)\b/i.test(e.label || "");
+  const ok = list.filter(e => e && !e.forced && en(e) && e.kind !== "image");
+  return ok.find(e => e.kind === "text" && !sdh(e)) || ok.find(e => e.kind === "text") || ok.find(e => !sdh(e)) || ok[0] || null;
+}
+// No English subtitles in the video: fetch them from SubDL when the name says clearly what it is, otherwise offer a search.
+async function ensureEnglishSubs(me){
+  if (cur !== me || !S.autoSubs || activeSub >= 0 || !N || !N.subsSearch) return;
+  const g = guessFromName((cur.kind === "torrent" && cur.tfile && cur.tfile.name) || cur.name);
+  const offer = () => { if (cur === me && activeSub < 0) showBanner({ id: "subs", text: "This video has no English subtitles.", actions: [{ label: "Find English subtitles", primary: true, fn: () => { hideBanner("subs"); openSubSearch(); } }, { label: "Dismiss", fn: () => hideBanner("subs") }] }); };
+  let c = {}; try { c = await N.subsCredsGet(); } catch {}
+  if (!c.subdl || !g.title || !((g.season && g.episode) || g.year)) { offer(); return; }
+  try {
+    const q = { query: g.title, year: g.year, season: g.season || "", episode: g.episode || "", lang: "en", subdlOnly: true };
+    const r = await N.subsSearch(q);
+    if (cur !== me || activeSub >= 0) return;
+    const hits = (r.results || []).filter(x => x.provider === "subdl" && !x.ai && (!g.episode || !x.episode || +x.episode === +g.episode))
+      .sort((a, b) => (+!!b.exact - +!!a.exact) || (+!a.hi - +!b.hi) || (b.downloads - a.downloads));
+    if (!hits.length) { offer(); return; }
+    const x = hits[0], local = cur.kind === "file" && pathOf(cur.file);
+    const d = await N.subsDownload({ provider: x.provider, id: x.id, lang: "en", season: x.season || q.season, episode: x.episode || q.episode, saveNextTo: S.saveSubs && local ? local : null });
+    if (cur !== me || activeSub >= 0) return;
+    const e = await addSubFile(new File([d.data], d.name), { label: "English · SubDL", lang: "en", source: "online", quiet: true });
+    if (e) toast("No English subtitles in the video, so Crave got them from SubDL: " + (x.release || x.title || g.title));
+    else offer();
+  } catch (err) { console.warn("Crave: couldn't fetch English subtitles", err); offer(); }
 }
 
 /* ================= look inside local files ================= */
@@ -2259,7 +2286,8 @@ async function inspectFile(file){
   P.subs.forEach(t => {
     const kind = isTextSub(t.codec) ? "text" : t.codec === "S_HDMV/PGS" ? "pgs" : "image";
     const ln = langName(t.lang);
-    const label = [ln || "Unknown language", t.name && t.name !== ln ? t.name : "", t.forced ? "Forced" : ""].filter(Boolean).join(" · ");
+    const ln2 = ln || (EN_TITLE.test(t.name || "") ? "English" : ""), extra = t.name && !new RegExp("^" + (ln2 || "\\0") + "$", "i").test(t.name) ? t.name : "";
+    const label = [ln2 || "Unknown language", extra, t.forced ? "Forced" : ""].filter(Boolean).join(" · ");
     const e = makeSubEntry({ label, lang: t.lang, codec: SCODEC[t.codec] || t.codec, source: "embedded", kind, forced: t.forced, def: t.def, track: t });
     if (kind !== "image") textSubs.push(e);
   });
@@ -2267,7 +2295,7 @@ async function inspectFile(file){
     const img = P.subs.length - textSubs.length;
     toast(`Found ${P.subs.length} built-in subtitle track${P.subs.length > 1 ? "s" : ""}` + (img ? ` (${img} in a picture format Crave can't show yet)` : ""));
   }
-  if (textSubs.length && S.autoSubs && activeSub < 0) { const pick = pickSub(textSubs); selectSub(subs.indexOf(pick)); }
+  if (textSubs.length && S.autoSubs && activeSub < 0) { const pick = pickSub(textSubs); if (pick) selectSub(subs.indexOf(pick)); }
   renderMenuIfOpen(); renderRailIfInfo();
   if (!textSubs.length) return;
   const onProg = p => { textSubs.forEach(e => { if (e.status === "loading") e.progress = p; }); renderMenuIfOpen(); };
@@ -2875,7 +2903,7 @@ const FF_V = c => /hevc/.test(c) ? "HEVC (H.265)" : c === "h264" ? "H.264" : c =
 const ffVideoOK = c => c === "h264" || c === "vp8" || c === "vp9" || c === "theora" || (c === "av1" && can('video/mp4; codecs="av01.0.05M.08"')) || (c === "hevc" && (can('video/mp4; codecs="hvc1.1.6.L93.B0"') || can('video/mp4; codecs="hev1.1.6.L93.B0"')));
 function pickAudio(A){
   if (!A || !A.length) return 0;
-  const en = t => langCode(t.lang) === "en";
+  const en = t => isEnglish(t.lang, t.name, t.title);
   const extra = t => /comment|descri|\bad\b|narrat|isolated|karaoke|music only/i.test((t.name || t.title || ""));
   let i = A.findIndex(t => en(t) && !extra(t));
   if (i < 0) i = A.findIndex(en);
@@ -3051,7 +3079,8 @@ async function inspectNative(){
   const list = [];
   R.subs.forEach((t, si) => {
     const ln = langName(t.lang);
-    const label = [ln || "Unknown language", t.title && t.title !== ln ? t.title : "", t.forced ? "Forced" : "", t.sdh ? "SDH" : ""].filter(Boolean).join(" · ");
+    const ln2 = ln || (EN_TITLE.test(t.title || "") ? "English" : ""), extra = t.title && !new RegExp("^" + (ln2 || "\\0") + "$", "i").test(t.title) ? t.title : "";
+    const label = [ln2 || "Unknown language", extra, t.forced ? "Forced" : "", t.sdh ? "SDH" : ""].filter(Boolean).join(" · ");
     const kind = t.codec === "hdmv_pgs_subtitle" ? "pgs" : FF_IMAGE_UNSUPPORTED.test(t.codec) ? "image" : "text";
     const e = makeSubEntry({ label, lang: t.lang, codec: FF_S[t.codec] || t.codec, source: "embedded", kind, forced: t.forced, def: t.def, sdh: t.sdh, si, native: true });
     if (kind !== "image") list.push(e);
@@ -3067,8 +3096,8 @@ async function inspectNative(){
     } catch (err) { console.warn("Crave: couldn't load subtitle files next to the video", err); }
   }
   if (S.autoSubs && activeSub < 0) {
-    if (side.length) selectSub(subs.indexOf(pickSub(side)));
-    else if (list.length) selectSub(subs.indexOf(pickSub(list)));
+    const pick = pickSub(side) || pickSub(list);
+    if (pick) selectSub(subs.indexOf(pick)); else ensureEnglishSubs(me);
   }
   if (P.duration) $("#hud").hidden = false;
   hdrApply(); renderMenuIfOpen(); renderRailIfInfo();

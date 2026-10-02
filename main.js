@@ -593,13 +593,13 @@ async function subdlSearch(c, q){
 ipcMain.handle("subs-search", async (_e, q) => {
   const c = readCreds(), jobs = [], errors = [];
   if (q.path && !q.hash) { try { q.hash = await movieHash(q.path); } catch {} }
-  if (c.osKey) {
+  if (c.osKey && !q.subdlOnly) {      // automatic English fetches use SubDL only, keeping OpenSubtitles' daily downloads for you
     jobs.push(osSearch(c, q).catch(e => { errors.push("OpenSubtitles: " + e.message); return []; }));
     // a hash-only search finds exact matches even when the title guess is off
     if (q.hash && q.query) jobs.push(osSearch(c, { ...q, query: "", year: "" }).catch(() => []));
   }
   if (c.subdl) jobs.push(subdlSearch(c, q).catch(e => { errors.push("SubDL: " + e.message); return []; }));
-  if (!jobs.length) return { results: [], errors: [], needsSetup: true };
+  if (!jobs.length) return { results: [], errors: [], needsSetup: !q.subdlOnly };
   const seen = new Set(), results = [];
   for (const list of await Promise.all(jobs)) for (const r of list) { const k = r.provider + ":" + r.id; if (!seen.has(k)) { seen.add(k); results.push(r); } }
   results.sort((a, b) => (b.exact - a.exact) || (b.downloads - a.downloads));
