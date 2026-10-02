@@ -399,7 +399,7 @@ function clipArgs(o, out, { copy, withSubs }){
     const st = o.subStyle || {};
     const hex = c => /^#?[0-9a-f]{6}$/i.test(c || "") ? c.replace("#", "") : "ffffff";
     const alpha = op => Math.round((1 - Math.max(0, Math.min(100, op == null ? 60 : op)) / 100) * 255).toString(16).padStart(2, "0").toUpperCase();
-    const style = [`FontName=${st.font || "Arial"}`, `FontSize=${st.size || 16}`, `PrimaryColour=${assColour(hex(st.color))}`, "MarginV=22"];
+    const style = [`FontName=${st.font || "Arial"}`, `FontSize=${st.size || 16}`, `PrimaryColour=${assColour(hex(st.color))}`, `MarginV=${Math.round(288 * (st.pos != null ? st.pos : 7) / 100)}`];
     if (st.bg === "line" || st.bg === "block" || st.bg === "band") {
       // libass draws the box in the outline colour; its alpha is inverted (00 = solid)
       style.push("BorderStyle=3", `OutlineColour=&H${alpha(st.bgOpacity)}${assColour(hex(st.bgColor)).slice(4)}`, "Outline=1.6", "Shadow=0");
@@ -414,7 +414,7 @@ function clipArgs(o, out, { copy, withSubs }){
   if (withSubs && o.sub && o.sub.kind === "pgs") {
     // Picture subtitles are drawn over the full-size frame, then the rest of the chain runs.
     const pre = o.hdr && !keepHdr ? vf.shift() + "," : "";
-    complex = `[0:v:0]${pre ? pre.slice(0, -1) : "null"}[base];[base][0:s:${o.sub.track}]overlay=(W-w)/2:(H-h)/2:eof_action=pass${vf.length ? "," + vf.join(",") : ""}`;
+    complex = `[0:v:0]${pre ? pre.slice(0, -1) : "null"}[base];[base][0:s:${o.sub.track}]overlay=(W-w)/2:(H-h)/2+H*${((7 - ((o.subStyle && o.subStyle.pos != null) ? o.subStyle.pos : 7)) / 100).toFixed(3)}:eof_action=pass${vf.length ? "," + vf.join(",") : ""}`;
   }
   // The network logo goes on last, at its final pixel size, in the chosen corner.
   if (lg) {

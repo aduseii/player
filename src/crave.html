@@ -487,8 +487,9 @@ main:has(> #view-board:not([hidden])){padding-block:12px}
 @container (max-width: 560px){ .speed,#shotBtn,#hdrBtn,#nextBtn{display:none} .scrub{gap:8px} .time{min-width:38px;font-size:12px} }
 
 /* subtitles stay put: one fixed height that clears the control bar, so showing or hiding the controls never moves them */
-.stage:not(.is-empty) #subsBottom{bottom:max(7%, min(112px, 16%));transition:none}
-.stage:not(.is-empty) #pgsLayer{transform:translateY(min(0px, calc(7% - min(112px, 16%))));transition:none}
+.stage:not(.is-empty) #subsBottom{bottom:var(--sub-pos,7%);transition:none}
+.stage:not(.is-empty) .subs-layer,.stage:not(.is-empty) #pgsLayer{z-index:4}   /* drawn over the control bar, so they stay readable while it shows */
+.stage:not(.is-empty) #pgsLayer{transform:translateY(calc(7% - var(--sub-pos,7%)));transition:none}
 
 
 
@@ -953,6 +954,7 @@ html[data-theme="light"] .lightbox{background:rgba(238,241,248,.95)}
         <div class="d"><strong>Subtitle style</strong><span>Used on screen, in screenshots and in clips with burned-in subtitles.</span></div>
         <div class="sub-preview" style="margin-top:12px"><div class="subs-layer" id="subPreview"><div class="sub-line"><span class="sub-t">This is how your subtitles will look.</span></div><div class="sub-line"><span class="sub-t"><i>Second line, in italics.</i></span></div></div></div>
         <div class="sub-style">
+          <label>Height from bottom<span class="row"><input type="range" id="ssPos" min="0" max="30" step="1"><span id="ssPosLbl" class="mono" style="min-width:96px;color:var(--fg)"></span></span></label>
           <label>Size<select id="setSubSize"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option><option value="xlarge">Extra large</option></select></label>
           <label>Text colour<select id="ssColor"><option value="#ffffff">White</option><option value="#fff176">Yellow</option><option value="#80deea">Cyan</option><option value="#a5d6a7">Green</option><option value="#d9d9d9">Light grey</option></select></label>
           <label>Edges<select id="ssEdge"><option value="shadow">Soft shadow</option><option value="outline">Outline</option><option value="none">None</option></select></label>
@@ -1098,7 +1100,7 @@ const store = {
   get(k, d){ try { const x = localStorage.getItem("crave:" + k); return x == null ? d : JSON.parse(x); } catch { return d; } },
   set(k, val){ try { localStorage.setItem("crave:" + k, JSON.stringify(val)); } catch {} }
 };
-const DEF = { wm:{ pos:"tl", size:12, opacity:100, margin:3, preview:true, last:null }, audio:{ decoder:"auto", surround:false, night:false, dialogue:false }, theme:"dark", ambient:true, sidecarSubs:true, saveSubs:true, subLang:"en", shotSubs:true, subStyle:{ color:"#ffffff", edge:"shadow", bg:"none", bgColor:"#000000", bgOpacity:60 }, hdr:"off", subSize:"medium", autoSubs:true, skip:10, speed:1, fmt:"image/png", autoDl:false, resume:true, autoNext:true, stats:true, volume:1, muted:false };
+const DEF = { wm:{ pos:"tl", size:12, opacity:100, margin:3, preview:true, last:null }, audio:{ decoder:"auto", surround:false, night:false, dialogue:false }, theme:"dark", ambient:true, subPos:7, sidecarSubs:true, saveSubs:true, subLang:"en", shotSubs:true, subStyle:{ color:"#ffffff", edge:"shadow", bg:"none", bgColor:"#000000", bgOpacity:60 }, hdr:"off", subSize:"medium", autoSubs:true, skip:10, speed:1, fmt:"image/png", autoDl:false, resume:true, autoNext:true, stats:true, volume:1, muted:false };
 const S = Object.assign({}, DEF, store.get("settings", {}));
 const saveSettings = () => store.set("settings", S);
 // Appearance: light, dark, or follow Windows. Set before anything draws so there is no flash.
@@ -2887,7 +2889,12 @@ function applySubStyle(){
   $("#ssBgColor").value = st.bgColor; $("#ssBgOpacity").value = st.bgOpacity; $("#ssBgOpacityLbl").textContent = st.bgOpacity + "%";
   $("#ssBgColor").disabled = $("#ssBgOpacity").disabled = st.bg === "none";
   $("#subPreview").style.fontSize = Math.round(22 * (SUB_SCALE[S.subSize] || 1)) + "px";
+  const pos = subPos(); r.setProperty("--sub-pos", pos + "%");
+  $("#ssPos").value = pos; $("#ssPosLbl").textContent = pos + "%" + (pos === 7 ? " (standard)" : "");
 }
+// Subtitle height: % of the player height from the bottom edge. 7% is the usual broadcast position.
+function subPos(){ const p = +S.subPos; return isFinite(p) && p >= 0 && p <= 30 ? Math.round(p) : 7; }
+$("#ssPos").oninput = e => { S.subPos = +e.target.value; saveSettings(); applySubStyle(); };
 function setSubStyle(patch){ S.subStyle = Object.assign(subSt(), patch); saveSettings(); applySubStyle(); }
 $("#ssColor").onchange = e => setSubStyle({ color: e.target.value });
 $("#ssEdge").onchange = e => setSubStyle({ edge: e.target.value });
@@ -2907,7 +2914,8 @@ async function drawSubsOnto(c){
     const d = D[idx]; if (!d || !d.items.length) return false;
     const sx = W / d.w, sy = H / d.h;
     ctx.imageSmoothingQuality = "high";
-    for (const it of d.items) ctx.drawImage(pgsBitmap(it), it.x * sx, it.y * sy, it.w * sx, it.h * sy);
+    const dy = c.height * (7 - subPos()) / 100;
+    for (const it of d.items) ctx.drawImage(pgsBitmap(it), it.x * sx, it.y * sy + dy, it.w * sx, it.h * sy);
     return true;
   }
   if (!e.tt || !e.tt.activeCues || !e.tt.activeCues.length) return false;
@@ -2975,7 +2983,7 @@ async function drawSubsOnto(c){
       }
     });
   };
-  drawBlock(groups.bottom, H * 0.93 - groups.bottom.length * lh);
+  drawBlock(groups.bottom, H * (1 - subPos() / 100) - groups.bottom.length * lh);
   drawBlock(groups.top, H * 0.07);
   return true;
 }
@@ -3475,7 +3483,7 @@ async function exportClip(){
     vcodec: vt ? vt.codec : "", hdr: (vt && vt.hdr) ? (/HLG/.test(vt.hdr) ? "HLG" : "HDR10") : "", keepHdr: clip.keepHdr,
     look: hdrActive() && clip.look && clip.format !== "m4a" ? hdrLevel() : 0,
     logo: clipLogoOpt(clip.format, clip.format === "mp4" ? clip.height : 0, clip.width),
-    sub: subOpt, subStyle: Object.assign({ font: fontInstalled("Netflix Sans") ? "Netflix Sans" : "Arial", size }, subSt())
+    sub: subOpt, subStyle: Object.assign({ font: fontInstalled("Netflix Sans") ? "Netflix Sans" : "Arial", size, pos: subPos() }, subSt())
   };
   const me = cur;
   clip.busy = true; clip.p = 0; renderClip();
