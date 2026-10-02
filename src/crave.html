@@ -128,7 +128,8 @@ video::cue{font-family:var(--f-body);background:rgba(0,0,0,.6);font-size:clamp(1
 .stage:not(.idle):not(.is-empty) #subsBottom{bottom:calc(7% + 64px)}
 .sub-line{font-family:var(--sub-font);font-weight:500;color:var(--sub-color,#fff);text-align:center;line-height:1.22;max-width:100%;overflow-wrap:anywhere;letter-spacing:.005em;text-shadow:var(--sub-shadow)}
 .sub-t{background:var(--sub-bg,transparent);padding:.04em .3em;border-radius:.12em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
-.sub-band .subs-layer:not(:empty){left:0;right:0;background:var(--sub-band-bg);padding:.18em 6%}
+.sub-block .subs-layer:not(:empty){left:50%;right:auto;transform:translateX(-50%);width:max-content;max-width:88%;background:var(--sub-band-bg);padding:.14em .5em;border-radius:.22em}
+.sub-preview.sub-block .subs-layer:not(:empty){transform:none;max-width:88%}
 .sub-preview{position:relative;height:150px;border-radius:12px;overflow:hidden;background:linear-gradient(160deg,#7fb3d5 0%,#e8d9b5 45%,#f4f1ea 55%,#2e4a3a 100%);display:flex;align-items:flex-end;justify-content:center;padding-bottom:16px}
 .sub-preview .subs-layer{position:static;font-size:22px}
 .sub-style{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px 18px;margin-top:14px}
@@ -523,7 +524,7 @@ dialog h3{font:700 22px var(--f-display);margin:0 0 12px}
           <label>Size<select id="setSubSize"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option><option value="xlarge">Extra large</option></select></label>
           <label>Text colour<select id="ssColor"><option value="#ffffff">White</option><option value="#fff176">Yellow</option><option value="#80deea">Cyan</option><option value="#a5d6a7">Green</option><option value="#d9d9d9">Light grey</option></select></label>
           <label>Edges<select id="ssEdge"><option value="shadow">Soft shadow</option><option value="outline">Outline</option><option value="none">None</option></select></label>
-          <label>Background<select id="ssBg"><option value="none">None</option><option value="line">Box behind each line</option><option value="band">Full-width band</option></select></label>
+          <label>Background<select id="ssBg"><option value="none">None</option><option value="line">Box behind each line</option><option value="block">One box around all lines</option></select></label>
           <label>Background colour<input type="color" id="ssBgColor" value="#000000"></label>
           <label>Background opacity<span class="row"><input type="range" id="ssBgOpacity" min="0" max="100" step="5"><span class="mono" id="ssBgOpacityLbl" style="min-width:42px;color:var(--fg)">60%</span></span></label>
         </div>
@@ -590,6 +591,7 @@ dialog h3{font:700 22px var(--f-display);margin:0 0 12px}
     <kbd>X</kbd><span>Clip mode on / off</span>
     <kbd>I O</kbd><span>Set clip start / end (in clip mode)</span>
     <kbd>E</kbd><span>HDR mode: Off, Natural, Vivid</span>
+    <kbd>- =</kbd><span>Audio delay earlier / later by 50 ms</span>
     <kbd>S</kbd><span>Screenshot</span>
     <kbd>A</kbd><span>Set loop start, end, then clear</span>
     <kbd>C</kbd><span>Subtitles on / off</span>
@@ -648,7 +650,7 @@ const store = {
   get(k, d){ try { const x = localStorage.getItem("crave:" + k); return x == null ? d : JSON.parse(x); } catch { return d; } },
   set(k, val){ try { localStorage.setItem("crave:" + k, JSON.stringify(val)); } catch {} }
 };
-const DEF = { sidecarSubs:true, saveSubs:true, subLang:"en", shotSubs:true, subStyle:{ color:"#ffffff", edge:"shadow", bg:"none", bgColor:"#000000", bgOpacity:60 }, hdr:"off", subSize:"medium", autoSubs:true, skip:10, speed:1, fmt:"image/png", autoDl:false, resume:true, autoNext:true, stats:true, volume:1, muted:false };
+const DEF = { audio:{ decoder:"auto", surround:false, night:false, dialogue:false }, sidecarSubs:true, saveSubs:true, subLang:"en", shotSubs:true, subStyle:{ color:"#ffffff", edge:"shadow", bg:"none", bgColor:"#000000", bgOpacity:60 }, hdr:"off", subSize:"medium", autoSubs:true, skip:10, speed:1, fmt:"image/png", autoDl:false, resume:true, autoNext:true, stats:true, volume:1, muted:false };
 const S = Object.assign({}, DEF, store.get("settings", {}));
 const saveSettings = () => store.set("settings", S);
 let library = store.get("library", []);           // [{id,url,name,kind,pos,dur,updated,marks:[{t,label}]}]
@@ -763,7 +765,7 @@ async function play(src, opts = {}){
   $("#empty").hidden = true; $("#stage").classList.remove("is-empty"); $("#hud").hidden = false; $("#nowbar").hidden = false; $("#spinner").hidden = false;
 
   const id = src.kind === "file" ? "file:" + src.file.name + ":" + src.file.size : src.url;
-  cur = { id, kind: src.kind, url: src.url || null, name: src.name || (src.file ? src.file.name : nameFromUrl(src.url, src.kind)), file: src.file || null };
+  cur = { audioDelay: 0, id, kind: src.kind, url: src.url || null, name: src.name || (src.file ? src.file.name : nameFromUrl(src.url, src.kind)), file: src.file || null };
 
   let entry = lib(id);
   if (!entry) { entry = { id, url: cur.url, name: cur.name, kind: cur.kind, pos: 0, dur: 0, marks: [] }; library.unshift(entry); }
@@ -1361,6 +1363,8 @@ document.addEventListener("keydown", e => {
     case "i": if (clip.on) { setClipEdge("a", v.currentTime); osd("Clip start " + fmt(clip.a)); } else hit = false; break;
     case "o": if (clip.on) { setClipEdge("b", v.currentTime); osd("Clip end " + fmt(clip.b)); } else hit = false; break;
     case "e": cycleHdr(); break;
+    case "-": nudgeDelay(-50); break;
+    case "=": nudgeDelay(50); break;
     case "a": cycleAB(); break;
     case "c": toggleSubs(); break;
     case "v": cycleSub(); break;
@@ -2015,20 +2019,25 @@ function detachExt(quiet){
   ext = null; if (!quiet) { applyVol(); renderMenuIfOpen(); }
 }
 // keep the converted audio locked to the picture
-const extTo = t => { if (!ext) return; if (ext.live) ext.seek(t); else ext.a.currentTime = t; };
+const aDelay = () => ((cur && cur.audioDelay) || 0) / 1000;          // + = sound later
+const extTo = t => { if (!ext) return; t = Math.max(0, t - aDelay()); if (ext.live) ext.seek(t); else ext.a.currentTime = t; };
 v.addEventListener("play", () => { if (ext) { extTo(v.currentTime); ext.a.play().catch(() => {}); } });
 v.addEventListener("playing", () => {
   if (ext) { extTo(v.currentTime); ext.a.play().catch(() => {}); }
-  clearTimeout(audioCheckT); const me = cur; audioCheckT = setTimeout(() => checkAudio(me), 3500);
+  clearTimeout(audioCheckT); const me = cur; audioCheckT = setTimeout(() => checkAudio(me), 2000);
 });
 v.addEventListener("pause", () => { if (ext) ext.a.pause(); });
 v.addEventListener("waiting", () => { if (ext) ext.a.pause(); });
 v.addEventListener("seeking", () => extTo(v.currentTime));
 v.addEventListener("ratechange", () => { if (ext) ext.a.playbackRate = v.playbackRate; });
+setInterval(() => { if (ext && !v.paused) v.dispatchEvent(new Event("timeupdate")); }, 250);   // sync check 4x a second
 v.addEventListener("timeupdate", () => {
   if (!ext || v.paused) return;
-  if (ext.live) { ext.flow(); if (Math.abs(ext.a.currentTime - v.currentTime) > .3) ext.seek(v.currentTime); else if (ext.a.paused && ext.a.readyState > 2) ext.a.play().catch(() => {}); }
-  else if (ext.a.readyState > 1 && Math.abs(ext.a.currentTime - v.currentTime) > .25) ext.a.currentTime = v.currentTime;
+  const want = Math.max(0, v.currentTime - aDelay()), drift = ext.a.currentTime - want;
+  // Big gaps jump; small ones are closed by running the sound 3% faster or slower for a moment (no clicks).
+  if (Math.abs(drift) > .5 || (!ext.live && ext.a.readyState > 1 && Math.abs(drift) > .25)) { ext.live ? ext.seek(want) : (ext.a.currentTime = want); ext.a.playbackRate = v.playbackRate; }
+  else ext.a.playbackRate = Math.abs(drift) > .025 ? v.playbackRate * (drift > 0 ? .97 : 1.03) : v.playbackRate;
+  if (ext.live) { ext.flow(); if (ext.a.paused && ext.a.readyState > 2) ext.a.play().catch(() => {}); }
 });
 
 /* ================= subtitles on screen: Netflix-style text and PGS pictures ================= */
@@ -2278,7 +2287,7 @@ $("#subFontInput").onchange = async e => {
 $("#subFontReset").onclick = () => { try { localStorage.removeItem("crave:subfont"); } catch {} applySubFont(); toast("Subtitle font reset"); };
 /* ---- subtitle style ---- */
 const SUB_DEFAULT = { color: "#ffffff", edge: "shadow", bg: "none", bgColor: "#000000", bgOpacity: 60 };
-const subSt = () => Object.assign({}, SUB_DEFAULT, S.subStyle || {});
+const subSt = () => { const st = Object.assign({}, SUB_DEFAULT, S.subStyle || {}); if (st.bg === "band") st.bg = "block"; return st; };
 const rgba = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; };
 const SHADOWS = {
   shadow: "0 0 .08em #000,0 0 .08em #000,0 .04em .12em #000,0 0 .35em rgba(0,0,0,.55)",
@@ -2291,8 +2300,8 @@ function applySubStyle(){
   r.setProperty("--sub-shadow", st.bg !== "none" && st.edge === "shadow" && a > .5 ? "none" : SHADOWS[st.edge] || SHADOWS.shadow);
   r.setProperty("--sub-bg", st.bg === "line" ? rgba(st.bgColor, a) : "transparent");
   r.setProperty("--sub-band-bg", rgba(st.bgColor, a));
-  stage.classList.toggle("sub-band", st.bg === "band");
-  $("#subPreview").parentElement.classList.toggle("sub-band", st.bg === "band");
+  stage.classList.toggle("sub-block", st.bg === "block");
+  $("#subPreview").parentElement.classList.toggle("sub-block", st.bg === "block");
   $("#ssColor").value = st.color; $("#ssEdge").value = st.edge; $("#ssBg").value = st.bg;
   $("#ssBgColor").value = st.bgColor; $("#ssBgOpacity").value = st.bgOpacity; $("#ssBgOpacityLbl").textContent = st.bgOpacity + "%";
   $("#ssBgColor").disabled = $("#ssBgOpacity").disabled = st.bg === "none";
@@ -2358,7 +2367,10 @@ async function drawSubsOnto(c){
   const drawBlock = (lines, topY) => {
     if (!lines.length) return;
     const widths = lines.map(l => l.reduce((s2, r) => s2 + r.w, 0));
-    if (st.bg === "band" && a > 0) { ctx.fillStyle = rgba(st.bgColor, a); ctx.fillRect(0, topY - px * 0.18, W, lines.length * lh + px * 0.36); }
+    if (st.bg === "block" && a > 0) {
+      const bw = Math.max(...widths) + px, bx = (W - bw) / 2, by = topY - px * 0.14, bh = lines.length * lh + px * 0.28;
+      ctx.fillStyle = rgba(st.bgColor, a); ctx.beginPath(); ctx.roundRect ? ctx.roundRect(bx, by, bw, bh, px * 0.22) : ctx.rect(bx, by, bw, bh); ctx.fill();
+    }
     lines.forEach((l, i) => {
       const y = topY + i * lh, x0 = (W - widths[i]) / 2;
       if (st.bg === "line" && a > 0) {
@@ -2408,6 +2420,32 @@ function pickAudio(A){
 }
 
 let liveSeq = 0;
+const AU = () => Object.assign({ decoder: "auto", surround: false, night: false, dialogue: false }, S.audio || {});
+function srcChannels(ai){
+  const t = cur && cur.probe && cur.probe.audio && cur.probe.audio[ai]; if (!t) return 2;
+  const l = String(t.layout || ""); const m = l.match(/^(\d)\.(\d)/);
+  return m ? +m[1] + +m[2] : /quad/.test(l) ? 4 : /mono/.test(l) ? 1 : (t.channels || 2);
+}
+function audioOpts(ai){ const A = AU(); return { channels: A.surround && srcChannels(ai) >= 6 ? 6 : 2, night: A.night, dialogue: A.dialogue }; }
+const wantsCrave = () => { const A = AU(); return A.decoder === "crave" || A.night || A.dialogue || !!(cur && cur.audioDelay); };
+// Re-route sound after an option changes: Crave's decoder when needed, the built-in player otherwise.
+function applyAudioRoute(){
+  if (!cur || !N || !nativeInput()) return;
+  const P = cur.probe, ai = ext ? ext.ai : (cur.audioIdx || 0), t = P && P.audio && P.audio[ai];
+  if (P && P.audio && !P.audio.length) return;
+  const need = wantsCrave() || ai !== 0 || (t && !t.supported) || (ext && ext.live && AU().surround);
+  if (need) startLive(ai); else if (ext && ext.live) detachExt();
+  renderMenuIfOpen();
+}
+function setAudioOpt(k, val){ S.audio = Object.assign(AU(), { [k]: val }); saveSettings(); applyAudioRoute(); }
+function nudgeDelay(ms){
+  if (!cur) return;
+  cur.audioDelay = Math.max(-5000, Math.min(5000, Math.round(((cur.audioDelay || 0) + ms) / 10) * 10));
+  if (!ext && cur.audioDelay && N && nativeInput()) applyAudioRoute();
+  else if (ext) extTo(v.currentTime);
+  if (!cur.audioDelay) applyAudioRoute();
+  osd("Audio delay " + (cur.audioDelay > 0 ? "+" : "") + cur.audioDelay + " ms"); renderMenuIfOpen();
+}
 // Plays one audio track through the bundled ffmpeg, converted as it plays, kept in step with the picture.
 function startLive(ai){
   const inp = nativeInput();
@@ -2446,7 +2484,7 @@ function startLive(ai){
     L.id = ++liveSeq; L.q = []; L.held = false; L.lastRestart = performance.now(); L.restartAt = t;
     if (L.sb) { try { L.sb.abort(); } catch {} }
     L.offset = t; L.pump();
-    N.astreamStart({ id: L.id, input: inp, track: ai, start: t });
+    N.astreamStart(Object.assign({ id: L.id, input: inp, track: ai, start: Math.max(0, t) }, audioOpts(ai)));
   };
   L.seek = t => {
     if (L.has(t)) { a.currentTime = t; return; }
@@ -2458,7 +2496,7 @@ function startLive(ai){
     try { L.sb = ms.addSourceBuffer('audio/mp4; codecs="mp4a.40.2"'); } catch { return; }
     L.sb.mode = "segments";
     L.sb.addEventListener("updateend", L.pump);
-    const t = Math.max(0, v.currentTime || 0);
+    const t = Math.max(0, (v.currentTime || 0) - aDelay());
     L.restart(t); a.currentTime = t;
     if (!v.paused) a.play().catch(() => {});
   }, { once: true });
@@ -2483,15 +2521,15 @@ async function inspectNative(){
   if (!R) { renderMenuIfOpen(); return; }
   const P = {
     container: "native", duration: R.duration || 0,
-    video: R.video.map(t => ({ codec: t.codec, cname: FF_V(t.codec), supported: ffVideoOK(t.codec), hdr: t.hdr || "", w: t.w, h: t.h, tenbit: t.tenbit })),
+    video: R.video.map(t => ({ codec: t.codec, cname: FF_V(t.codec), supported: ffVideoOK(t.codec), hdr: t.hdr || "", dvProfile: t.dvProfile || 0, w: t.w, h: t.h, tenbit: t.tenbit })),
     audio: R.audio.map(t => ({ codec: t.codec, cname: FF_A[t.codec] || t.codec.toUpperCase(), supported: SAFE_A.has(t.codec), lang: t.lang, name: t.title, def: t.def, channels: 0, layout: t.layout })),
     subs: []
   };
   cur.probe = P;
   const ai = pickAudio(P.audio);
   cur.audioIdx = ai;
-  $("#audioBtn").hidden = P.audio.length < 2;
-  if (P.audio.length && (ai !== 0 || !P.audio[0].supported) && !ext) startLive(ai);
+  $("#audioBtn").hidden = !P.audio.length;
+  if (P.audio.length && (ai !== 0 || !P.audio[ai].supported || wantsCrave()) && !ext) startLive(ai);
   const vt = P.video[0];
   if (vt && !vt.supported) showBanner({ id: "video", bad: true, text: `This video is ${vt.cname}, which this computer can't decode, so the picture may stay black. ` + (/HEVC/.test(vt.cname) ? "Installing Microsoft's free \"HEVC Video Extensions\" usually fixes this." : "Converting it to H.264 MP4 (HandBrake does this for free) will make it play."), actions: [{ label: "Dismiss", fn: () => hideBanner("video") }] });
   const list = [];
@@ -2530,7 +2568,7 @@ let hdrGL = null, hdrGLFailed = false, hdrCSS = false, hdrLoop = 0;
 const hdrScreen = () => { try { return matchMedia("(dynamic-range: high)").matches; } catch { return false; } };
 const srcHDR = () => (cur && cur.probe && cur.probe.video && cur.probe.video[0] && cur.probe.video[0].hdr) || "";
 const hdrLevel = () => HDR_LEVELS[S.hdr] || 0;
-const hdrActive = () => !!cur && hdrLevel() > 0 && !srcHDR();
+const hdrActive = () => !!cur && hdrLevel() > 0;
 function hdrInit(){
   if (hdrGL || hdrGLFailed) return hdrGL;
   try {
@@ -2624,7 +2662,7 @@ function hdrApply(){
   v.style.filter = hdrCSS ? `contrast(${1 + .1 * k}) saturate(${1 + .3 * k}) brightness(${1 + .02 * k})` : "";
   if (useGL) { hdrRender(); hdrSchedule(); }
   const btn = $("#hdrBtn");
-  btn.classList.toggle("on", on || !!srcHDR());
+  btn.classList.toggle("on", on);
   $("#hdrLbl").textContent = srcHDR() ? srcHDR().replace(" / HDR10", "") : "HDR";
   btn.title = srcHDR() ? `${srcHDR()} video` : on ? `HDR mode: ${HDR_NAMES[S.hdr]} (E)` : "HDR mode (E)";
   const chip = $("#hdrChip"); chip.hidden = !srcHDR(); chip.textContent = srcHDR();
@@ -2641,16 +2679,17 @@ try { matchMedia("(dynamic-range: high)").addEventListener("change", () => { ren
 function renderHdrMenu(m){
   const ck = on => `<span class="ck">${on ? "✓" : ""}</span>`, real = srcHDR(), screen = hdrScreen();
   let h = `<h4>HDR</h4>`;
-  if (real) {
-    h += `<p class="note"><b style="color:var(--ok)">This is ${esc(real)} video.</b> ${screen ? "Your screen is in HDR mode, so it's playing in true HDR." : "Your screen is showing standard range, so Windows converts it to SDR. Turn on <b>Use HDR</b> in Windows Settings → Display to see it in true HDR."}</p>`;
-    h += `<p class="note" style="padding-top:0">HDR mode is for regular videos, so it's off for this one.</p>`;
-  } else {
-    for (const lv of ["off", "natural", "vivid"]) {
-      const sub = { off: "The picture as it was made", natural: "Deeper contrast, brighter highlights", vivid: "Strong contrast and colour" }[lv];
-      h += `<button class="mi" data-hdr="${lv}">${ck((S.hdr || "off") === lv)}<span><span class="a">${HDR_NAMES[lv]}</span><span class="b">${sub}</span></span></button>`;
-    }
-    h += `<p class="note">${hdrCSS ? "This source blocks the full effect, so a lighter version is used." : "This video is standard range (SDR). HDR mode enhances it live."} ${screen ? "Your screen has HDR on." : ""}</p>`;
+  for (const lv of ["off", "natural", "vivid"]) {
+    const sub = { off: real ? "Plain " + real.replace(/ \/ HDR10/, "") + " picture" : "The picture as it was made", natural: "Deeper contrast, brighter highlights", vivid: "Strong contrast and colour" }[lv];
+    h += `<button class="mi" data-hdr="${lv}">${ck((S.hdr || "off") === lv)}<span><span class="a">${HDR_NAMES[lv]}</span><span class="b">${sub}</span></span></button>`;
   }
+  if (real) {
+    const dv = cur.probe && cur.probe.video[0] && cur.probe.video[0].dvProfile;
+    h += `<p class="note"><b style="color:var(--ok)">This is ${esc(real)} video.</b> ${screen
+      ? (hdrActive() ? "HDR mode is on, so it's shown in standard range with the HDR mode look instead of true HDR. Choose Off for true HDR." : "Your screen is in HDR, so it's playing in true HDR.")
+      : (hdrActive() ? "HDR mode adds depth and colour on top of Windows' conversion to standard range." : "Your screen is standard range, so Windows converts it, which can look dim or flat. HDR mode brings back contrast and colour.")}</p>`;
+    if (dv === 5) h += `<p class="note" style="padding-top:0"><b>Dolby Vision profile 5:</b> only Dolby Vision players decode its colours exactly. If skin tones look green or purple, the file itself needs a Dolby Vision player.</p>`;
+  } else h += `<p class="note">${hdrCSS ? "This source blocks the full effect, so a lighter version is used." : "This video is standard range (SDR). HDR mode enhances it live."} ${screen ? "Your screen has HDR on." : ""}</p>`;
   m.innerHTML = h;
   m.querySelectorAll("[data-hdr]").forEach(b => b.onclick = () => setHdr(b.dataset.hdr));
 }
@@ -2733,7 +2772,7 @@ function renderClip(){
   if (clip.format !== "m4a") {
     if (sub && (sub.tt || sub.pgs)) h += `<label class="clip-ck"><input type="checkbox" id="clipSubs" ${clip.subs ? "checked" : ""}> Burn in subtitles (${esc(sub.label)})</label>`;
     if (real && clip.format === "mp4") h += `<label class="clip-ck"><input type="checkbox" id="clipHdr" ${clip.keepHdr ? "checked" : ""}> Keep ${esc(real.replace(" / HDR10", ""))} (needs an HDR screen to look right)</label>`;
-    if (!real && hdrActive()) h += `<label class="clip-ck"><input type="checkbox" id="clipLook" ${clip.look ? "checked" : ""}> Include the HDR mode look</label>`;
+    if (hdrActive()) h += `<label class="clip-ck"><input type="checkbox" id="clipLook" ${clip.look ? "checked" : ""}> Include the HDR mode look</label>`;
   }
   const reencode = clip.format === "mp4" && (clip.mode === "exact" || clip.height || (clip.subs && sub) || (clip.look && hdrActive()) || (real && !clip.keepHdr));
   const audio = clipAudioIndex(), P = cur && cur.probe;
@@ -2794,7 +2833,7 @@ async function exportClip(){
     audioTrack: clip.format === "gif" ? null : clipAudioIndex(),
     audioLang: (() => { const i = clipAudioIndex(), A = P.audio || []; return i != null && A[i] ? langCode(A[i].lang) && A[i].lang : ""; })(),
     vcodec: vt ? vt.codec : "", hdr: (vt && vt.hdr) ? (/HLG/.test(vt.hdr) ? "HLG" : "HDR10") : "", keepHdr: clip.keepHdr,
-    look: !srcHDR() && hdrActive() && clip.look && clip.format !== "m4a" ? hdrLevel() : 0,
+    look: hdrActive() && clip.look && clip.format !== "m4a" ? hdrLevel() : 0,
     sub: subOpt, subStyle: Object.assign({ font: fontInstalled("Netflix Sans") ? "Netflix Sans" : "Arial", size }, subSt())
   };
   const me = cur;
@@ -2911,17 +2950,32 @@ async function ssSearch(){
   ssLast = { q, results: r.results };
   renderSsResults(r);
 }
+// Order: exact-file matches first (worth an OpenSubtitles download), then SubDL (no daily limit worth
+// worrying about), then other OpenSubtitles results, which are tucked away when SubDL already has some.
 function renderSsResults(r){
-  const { results, errors } = r;
-  const langLabel = c => (SS_LANGS.find(l => l[0] === c) || [0, langName(c) || c.toUpperCase()])[1];
-  let h = `<div class="ss-status">${results.length ? `${results.length} result${results.length > 1 ? "s" : ""}` : "No subtitles found. Try a shorter title, or check the year and episode."}${r.hashed && results.some(x => x.exact) ? ` · <span style="color:var(--ok)">${results.filter(x => x.exact).length} made for this exact file</span>` : ""}${errors && errors.length ? ` · <span style="color:var(--warn)">${esc(errors.join(" · "))}</span>` : ""}</div>`;
-  h += `<div class="ss-list">` + results.map((x, i) => {
+  const { errors } = r;
+  const all = r.results.map((x, i) => ({ ...x, i }));
+  const exact = all.filter(x => x.exact);
+  const sd = all.filter(x => !x.exact && x.provider === "subdl").sort((a, b) => b.downloads - a.downloads);
+  const osOther = all.filter(x => !x.exact && x.provider !== "subdl").sort((a, b) => b.downloads - a.downloads);
+  const tuck = sd.length > 0 && osOther.length > 0;
+  const langLabel = c => (SS_LANGS.find(l => l[0] === c) || [0, langName(c) || String(c).toUpperCase()])[1];
+  const left = r.osRemaining;
+  const row = x => {
     const meta = [langLabel(x.lang), x.season ? `S${String(x.season).padStart(2, "0")}${x.episode ? "E" + String(x.episode).padStart(2, "0") : ""}` : (x.year ? String(x.year) : ""), x.downloads ? `${x.downloads.toLocaleString()} downloads` : "", x.uploader ? "by " + x.uploader : ""].filter(Boolean).join(" · ");
-    return `<div class="ss-row"><div class="main"><div class="rel">${x.exact ? `<span class="ss-tag exact">Exact match</span>` : ""}<span class="ss-tag ${x.provider === "subdl" ? "sd" : "os"}">${x.provider === "subdl" ? "SubDL" : "OpenSubtitles"}</span>${x.hi ? `<span class="ss-tag">HI</span>` : ""}${x.ai ? `<span class="ss-tag">Machine-translated</span>` : ""}${x.fullSeason ? `<span class="ss-tag">Full season</span>` : ""}${esc(x.release || x.title || "Untitled")}</div><div class="meta">${esc(meta)}</div></div><button class="btn sm" data-get="${i}">Use</button></div>`;
-  }).join("") + `</div>`;
+    const cost = x.provider !== "subdl" ? ` · <span style="color:var(--warn)">uses 1 OpenSubtitles download${left != null ? ` (${left} left today)` : ""}</span>` : "";
+    return `<div class="ss-row"><div class="main"><div class="rel">${x.exact ? `<span class="ss-tag exact">Exact match</span>` : ""}<span class="ss-tag ${x.provider === "subdl" ? "sd" : "os"}">${x.provider === "subdl" ? "SubDL" : "OpenSubtitles"}</span>${x.hi ? `<span class="ss-tag">HI</span>` : ""}${x.ai ? `<span class="ss-tag">Machine-translated</span>` : ""}${x.fullSeason ? `<span class="ss-tag">Full season</span>` : ""}${esc(x.release || x.title || "Untitled")}</div><div class="meta">${esc(meta)}${cost}</div></div><button class="btn sm${x.exact ? " primary" : ""}" data-get="${x.i}">Use</button></div>`;
+  };
+  const n = all.length;
+  let h = `<div class="ss-status">${n ? `${n} result${n > 1 ? "s" : ""}` : "No subtitles found. Try a shorter title, or check the year and episode."}${exact.length ? ` · <span style="color:var(--ok)">${exact.length} made for this exact file</span>` : ""}${errors && errors.length ? ` · <span style="color:var(--warn)">${esc(errors.join(" · "))}</span>` : ""}</div>`;
+  h += `<div class="ss-list">` + exact.map(row).join("") + sd.map(row).join("");
+  if (tuck) h += `<button class="btn sm ghost" id="ssMoreOs" style="margin:6px 8px">More from OpenSubtitles (${osOther.length}) · these use your daily downloads</button><div id="ssOsMore" hidden>${osOther.map(row).join("")}</div>`;
+  else h += osOther.map(row).join("");
+  h += `</div>`;
   $("#ssBody").innerHTML = h;
   $("#ssBody").querySelectorAll("[data-get]").forEach(b => b.onclick = () => ssDownload(+b.dataset.get, b));
-  if (r.osRemaining != null) $("#ssQuota").textContent = `OpenSubtitles downloads left today: ${r.osRemaining}`;
+  const more = $("#ssMoreOs"); if (more) more.onclick = () => { $("#ssOsMore").hidden = false; more.remove(); };
+  if (left != null) $("#ssQuota").textContent = `OpenSubtitles downloads left today: ${left}`;
 }
 async function ssDownload(i, btn){
   const x = ssLast && ssLast.results[i]; if (!x || !cur) return;
@@ -3001,7 +3055,24 @@ function renderMenu(){
     });
     if (!A.length) h += `<p class="note">${canFix() ? "Crave couldn't list this file's audio tracks." : "Audio tracks can be switched for files opened from your computer."}</p>`;
     if (!A.length && canFix()) h += `<button class="mi" data-ai="0">${ck(!!ext)}<span><span class="a">Convert the audio</span><span class="b">Use this if a file plays without sound</span></span></button>`;
+    if (N && nativeInput()) {
+      const O = AU(), d = (cur && cur.audioDelay) || 0, multi = srcChannels(curAi) >= 6;
+      h += `<div class="sep"></div><h4>Sound</h4>
+        <button class="mi" data-opt="night">${ck(O.night)}<span><span class="a">Night mode</span><span class="b">Evens out loud scenes and quiet dialogue</span></span></button>
+        <button class="mi" data-opt="dialogue">${ck(O.dialogue)}<span><span class="a">Dialogue boost</span><span class="b">Clearer voices${multi ? ", from the centre channel" : ""}</span></span></button>
+        <button class="mi" data-opt="surround" ${multi ? "" : "disabled"}>${ck(O.surround && multi)}<span><span class="a">Surround output</span><span class="b">${multi ? "Send 5.1 to your speakers instead of stereo" : "This track is stereo"}</span></span></button>
+        <button class="mi" data-opt="decoder">${ck(O.decoder === "crave")}<span><span class="a">Always use Crave's decoder</span><span class="b">Plays every audio format; use if a video is ever silent</span></span></button>
+        <div class="delay"><span style="flex:1">Delay <span class="mono" style="color:var(--honey)">${d > 0 ? "+" : ""}${d} ms</span></span><button class="btn sm" data-dl="-50" title="Sound earlier (-)">Earlier</button><button class="btn sm" data-dl="50" title="Sound later (=)">Later</button>${d ? `<button class="btn sm ghost" data-dl="0">Reset</button>` : ""}</div>
+        <p class="note" style="padding-top:0">${ext && ext.live ? "Sound is coming from Crave's decoder." : "Sound is coming from the built-in player."} Keys: - and = change the delay.</p>`;
+    }
     m.innerHTML = h;
+    m.querySelectorAll("[data-opt]").forEach(b => b.onclick = () => {
+      const k = b.dataset.opt, O = AU();
+      if (k === "decoder") setAudioOpt("decoder", O.decoder === "crave" ? "auto" : "crave");
+      else setAudioOpt(k, !O[k]);
+      osd({ night: "Night mode", dialogue: "Dialogue boost", surround: "Surround output", decoder: "Crave's decoder" }[k] + (k === "decoder" ? (AU().decoder === "crave" ? " on" : " off") : (AU()[k] ? " on" : " off")));
+    });
+    m.querySelectorAll("[data-dl]").forEach(b => b.onclick = () => { const x = +b.dataset.dl; if (x === 0) { if (cur) { cur.audioDelay = 0; applyAudioRoute(); osd("Audio delay 0 ms"); } } else nudgeDelay(x); });
     m.querySelectorAll("[data-ai]").forEach(b => b.onclick = () => {
       const i = +b.dataset.ai, t = A[i];
       if (t && i === 0 && t.supported) { detachExt(); if (cur) cur.audioIdx = 0; toast("Switched to " + trackLabel(t, 0)); }

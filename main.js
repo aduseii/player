@@ -99,6 +99,32 @@ function createWindow(){
   win.once("ready-to-show", () => win.show());
   win.webContents.on("did-finish-load", () => { if (pendingOpen.length) { win.webContents.send("open", pendingOpen); pendingOpen = []; } });
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/i.test(url)) shell.openExternal(url); return { action: "deny" }; });
+  // Right-click menu: editing for text fields, Copy for selections, and "Play link" anywhere else.
+  win.webContents.on("context-menu", async (_e, p) => {
+    const { clipboard } = require("electron");
+    let clip = "";
+    try { clip = String((await clipboard.readText()) || "").trim(); } catch {}   // a promise in newer Electron
+    const playable = /^(magnet:|https?:\/\/)\S+$/i.test(clip) || /^[a-f0-9]{40}$/i.test(clip);
+    const items = [];
+    if (p.isEditable) {
+      items.push(
+        { label: "Undo", role: "undo", enabled: p.editFlags.canUndo },
+        { label: "Redo", role: "redo", enabled: p.editFlags.canRedo },
+        { type: "separator" },
+        { label: "Cut", role: "cut", enabled: p.editFlags.canCut },
+        { label: "Copy", role: "copy", enabled: p.editFlags.canCopy },
+        { label: "Paste", role: "paste", enabled: p.editFlags.canPaste },
+        { label: "Paste and play", enabled: playable, click: () => win.webContents.send("open", [{ link: clip }]) },
+        { type: "separator" },
+        { label: "Select all", role: "selectAll" }
+      );
+    } else {
+      if (p.selectionText && p.selectionText.trim()) items.push({ label: "Copy", role: "copy" }, { type: "separator" });
+      if (p.linkURL && /^https?:/i.test(p.linkURL)) items.push({ label: "Open link in browser", click: () => shell.openExternal(p.linkURL) }, { label: "Copy link", click: () => clipboard.writeText(p.linkURL) }, { type: "separator" });
+      items.push({ label: playable ? "Play link from clipboard" : "Play link from clipboard (nothing to play)", enabled: playable, click: () => win.webContents.send("open", [{ link: clip }]) });
+    }
+    Menu.buildFromTemplate(items).popup({ window: win });
+  });
   win.webContents.on("will-navigate", (e, url) => { if (!url.startsWith("app://")) e.preventDefault(); });
   win.webContents.on("before-input-event", (_e, input) => {
     if (input.type === "keyDown" && (input.key === "F12" || (input.control && input.shift && input.key.toLowerCase() === "i"))) win.webContents.toggleDevTools();
@@ -238,7 +264,11 @@ function parseProbe(text){
       last = s; continue;
     }
     if (/^\s*Stream #/.test(l)) { last = null; continue; }
-    if (/DOVI configuration record/.test(l) && res.video.length) { const vs = res.video[res.video.length - 1]; vs.hdr = "Dolby Vision" + (vs.hdr === "HDR10" ? " / HDR10" : ""); }
+    if (/DOVI configuration record/.test(l) && res.video.length) {
+      const vs = res.video[res.video.length - 1], pm = l.match(/profile:\s*(\d+)/);
+      vs.dvProfile = pm ? +pm[1] : 0;
+      vs.hdr = "Dolby Vision" + (vs.hdr === "HDR10" && vs.dvProfile !== 5 ? " / HDR10" : "");
+    }
     if (/Mastering Display Metadata|Content Light Level/.test(l) && res.video.length && !res.video[res.video.length - 1].hdr) res.video[res.video.length - 1].hdr = "HDR10";
     const t = l.match(/^\s{4,}title\s*:\s*(.+)$/);
     if (t && last) last.title = t[1].trim();
@@ -257,12 +287,17 @@ ipcMain.handle("probe", (_e, input) => new Promise(resolve => {
 /* ---------- live audio: any codec, converted on the fly from the playback position ---------- */
 const astreams = new Map();
 function stopAstreams(){ for (const p of astreams.values()) { try { p.kill(); } catch {} } astreams.clear(); }
-ipcMain.handle("astream-start", (e, { id, input, track, start }) => {
+ipcMain.handle("astream-start", (e, { id, input, track, start, channels = 2, night = false, dialogue = false }) => {
   stopAstreams();
   const args = ["-hide_banner", "-nostdin", "-loglevel", "error"];
   if (start > 0) args.push("-ss", start.toFixed(3));
-  args.push("-i", input, "-map", `0:a:${track}`, "-vn", "-sn", "-dn",
-    "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000",
+  // Sound options: keep 5.1 or fold to stereo, lift the centre (dialogue) channel, and even out loud/quiet parts.
+  const surround = channels >= 6, af = [];
+  af.push(`aformat=channel_layouts=${surround ? "5.1" : "stereo"}`);
+  if (dialogue) af.push(surround ? "pan=5.1|FL=FL|FR=FR|FC=1.7*FC|LFE=LFE|BL=BL|BR=BR" : "dialoguenhance=enhance=2.5,aformat=channel_layouts=stereo");
+  if (night) af.push("acompressor=threshold=-26dB:ratio=4:attack=5:release=250:makeup=7dB", "alimiter=limit=0.95:level=disabled");
+  args.push("-i", input, "-map", `0:a:${track}`, "-vn", "-sn", "-dn", "-af", af.join(","),
+    "-c:a", "aac", "-b:a", surround ? "384k" : "192k", "-ac", surround ? "6" : "2", "-ar", "48000",
     "-f", "mp4", "-movflags", "+empty_moov+default_base_moof", "-frag_duration", "500000", "pipe:1");
   const p = spawn(ffmpegPath(), args, { windowsHide: true });
   astreams.set(id, p);
@@ -326,7 +361,7 @@ function clipArgs(o, out, { copy, withSubs }){
     const hex = c => /^#?[0-9a-f]{6}$/i.test(c || "") ? c.replace("#", "") : "ffffff";
     const alpha = op => Math.round((1 - Math.max(0, Math.min(100, op == null ? 60 : op)) / 100) * 255).toString(16).padStart(2, "0").toUpperCase();
     const style = [`FontName=${st.font || "Arial"}`, `FontSize=${st.size || 16}`, `PrimaryColour=${assColour(hex(st.color))}`, "MarginV=22"];
-    if (st.bg === "line" || st.bg === "band") {
+    if (st.bg === "line" || st.bg === "block" || st.bg === "band") {
       // libass draws the box in the outline colour; its alpha is inverted (00 = solid)
       style.push("BorderStyle=3", `OutlineColour=&H${alpha(st.bgOpacity)}${assColour(hex(st.bgColor)).slice(4)}`, "Outline=1.6", "Shadow=0");
     } else if (st.edge === "outline") style.push("BorderStyle=1", "OutlineColour=&H00000000", "Outline=1.4", "Shadow=0");
@@ -334,7 +369,7 @@ function clipArgs(o, out, { copy, withSubs }){
     else style.push("BorderStyle=1", "OutlineColour=&H40000000", "BackColour=&H60000000", "Outline=0.8", "Shadow=0.9");
     vf.push(`subtitles=${o.subFile}:force_style='${style.join(",")}'`);
   }
-  if (o.look > 0) { const k = o.look; vf.push(`eq=contrast=${(1 + 0.10 * k).toFixed(3)}:saturation=${(1 + 0.28 * k).toFixed(3)}:gamma=${(1 - 0.04 * k).toFixed(3)},unsharp=5:5:${(0.35 * k).toFixed(2)}:5:5:0`); }
+  if (o.look > 0 && !keepHdr) { const k = o.look; vf.push(`eq=contrast=${(1 + 0.10 * k).toFixed(3)}:saturation=${(1 + 0.28 * k).toFixed(3)}:gamma=${(1 - 0.04 * k).toFixed(3)},unsharp=5:5:${(0.35 * k).toFixed(2)}:5:5:0`); }
   if (o.format === "gif") vf.push(`fps=${o.fps || 15}`, `scale=${o.width || 640}:-2:flags=lanczos`);
   else if (o.height) vf.push(`scale=-2:'min(${o.height},ih)':flags=lanczos`);
   if (withSubs && o.sub && o.sub.kind === "pgs") {
