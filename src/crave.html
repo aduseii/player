@@ -125,7 +125,7 @@ video::cue{font-family:var(--f-body);background:rgba(0,0,0,.6);font-size:clamp(1
 .subs-layer{position:absolute;left:6%;right:6%;display:flex;flex-direction:column;align-items:center;gap:.1em;pointer-events:none;z-index:2;font-size:var(--sub-size,26px);transition:bottom .2s ease}
 #subsBottom{bottom:7%}
 #subsTop{top:7%}
-.stage:not(.idle):not(.is-empty) #subsBottom{bottom:calc(7% + 64px)}
+
 .sub-line{font-family:var(--sub-font);font-weight:500;color:var(--sub-color,#fff);text-align:center;line-height:1.22;max-width:100%;overflow-wrap:anywhere;letter-spacing:.005em;text-shadow:var(--sub-shadow)}
 .sub-t{background:var(--sub-bg,transparent);padding:.04em .3em;border-radius:0;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .sub-block .subs-layer:not(:empty){left:50%;right:auto;transform:translateX(-50%);width:max-content;max-width:88%;background:var(--sub-band-bg);padding:.14em .5em;border-radius:0}
@@ -140,7 +140,7 @@ video::cue{font-family:var(--f-body);background:rgba(0,0,0,.6);font-size:clamp(1
 .sub-style .row{display:flex;align-items:center;gap:10px}
 .sub-style .row input[type=range]{flex:1}
 #pgsLayer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2;transition:transform .2s ease}
-.stage:not(.idle):not(.is-empty) #pgsLayer{transform:translateY(-56px)}
+
 .stage{container-type:inline-size}
 @container (max-width: 1040px){ .cb .lbl.hide-md{display:none} }
 #hdrLayer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}
@@ -486,9 +486,11 @@ main:has(> #view-board:not([hidden])){padding-block:12px}
 @container (max-width: 920px){ .vol input{width:56px} .ctrls .hide-sm{display:none} }
 @container (max-width: 560px){ .speed,#shotBtn,#hdrBtn,#nextBtn{display:none} .scrub{gap:8px} .time{min-width:38px;font-size:12px} }
 
-/* subtitles and pictures stay clear of the bar */
-.stage:not(.idle):not(.is-empty) #subsBottom{bottom:calc(7% + 104px)}
-.stage:not(.idle):not(.is-empty) #pgsLayer{transform:translateY(-92px)}
+/* subtitles stay put: one fixed height that clears the control bar, so showing or hiding the controls never moves them */
+.stage:not(.is-empty) #subsBottom{bottom:max(7%, min(112px, 16%));transition:none}
+.stage:not(.is-empty) #pgsLayer{transform:translateY(min(0px, calc(7% - min(112px, 16%))));transition:none}
+
+
 
 /* frosted menus and panels over the picture */
 .menu{background:var(--glass);backdrop-filter:blur(30px) saturate(1.7);border:.5px solid var(--glass-line);border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.55);padding:8px;right:18px;bottom:108px;width:320px}
@@ -658,6 +660,82 @@ dialog{background:rgba(24,26,44,.88);backdrop-filter:blur(30px) saturate(1.5)}
 .toast{background:rgba(30,32,52,.88)}
 .speed-sel option{background:#1b1d30}
 .errbox{background:rgba(8,10,20,.82)}
+/* ================================================================
+   Light mode: "daylight frost". Pale blue-white ground with soft
+   periwinkle, lilac and mint light; white frosted glass; ink text.
+   The player and everything over the picture stay dark.
+   ================================================================ */
+.seg{display:inline-flex;background:var(--panel-2);border-radius:10px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg button{border:0;background:transparent;color:var(--muted);font:600 13px var(--f-ui);padding:6px 12px;border-radius:8px;cursor:pointer}
+.seg button[aria-checked="true"]{background:var(--seg-on,rgba(255,255,255,.92));color:var(--seg-on-fg,#0b0d1a);box-shadow:0 1px 4px rgba(0,0,0,.18)}
+html[data-theme="light"]{
+  --night:#eef1f8;
+  --ink:#eef1f8;
+  --fg:#14162b;
+  --muted:rgba(20,22,43,.62);
+  --faint:rgba(20,22,43,.38);
+  --panel:rgba(255,255,255,.66);
+  --panel-2:rgba(20,22,43,.06);
+  --panel-3:rgba(20,22,43,.1);
+  --line:rgba(20,22,43,.1);
+  --glass-light:rgba(255,255,255,.72);
+  --honey-2:#f08a1c;
+  --seg-on:#14162b; --seg-on-fg:#fff;
+  color-scheme:light;
+}
+html[data-theme="light"] body{color:var(--fg);background:
+  radial-gradient(900px 620px at 6% -8%, rgba(120,140,255,.30), transparent 62%),
+  radial-gradient(800px 560px at 96% 2%, rgba(205,150,255,.24), transparent 60%),
+  radial-gradient(900px 700px at 55% 112%, rgba(90,215,200,.20), transparent 60%),
+  var(--night);background-attachment:fixed}
+html[data-theme="light"] .top{background:rgba(255,255,255,.6);box-shadow:0 .5px 0 rgba(20,22,43,.08)}
+html[data-theme="light"] .brand{color:var(--fg)}
+html[data-theme="light"] .tabs{background:rgba(20,22,43,.06)}
+html[data-theme="light"] .tab{color:var(--muted)}
+html[data-theme="light"] .tab[aria-selected="true"]{background:#14162b;color:#fff;box-shadow:0 2px 10px rgba(20,22,43,.2)}
+html[data-theme="light"] .tab[aria-selected="true"] .count{color:rgba(255,255,255,.55)}
+html[data-theme="light"] .top .linkbar .field{background:rgba(20,22,43,.06);color:var(--muted)}
+html[data-theme="light"] .top .linkbar input{color:var(--fg)}
+html[data-theme="light"] .kbd-btn{background:rgba(20,22,43,.06);color:var(--muted)}
+html[data-theme="light"] .btn{background:rgba(20,22,43,.06);color:var(--fg)}
+html[data-theme="light"] .btn:hover{background:rgba(20,22,43,.11)}
+html[data-theme="light"] .btn.ghost{background:transparent}
+html[data-theme="light"] .btn.primary,html[data-theme="light"] .stage .btn.primary{background:linear-gradient(180deg,var(--honey),var(--honey-2));color:var(--honey-ink)}
+html[data-theme="light"] .btn.primary:hover{background:linear-gradient(180deg,#ffcd6e,#f59a35)}
+html[data-theme="light"] .stage:not(.is-empty) .btn:not(.primary){background:rgba(255,255,255,.12);color:#f5f5f7}
+html[data-theme="light"] .stage:not(.is-empty) .btn.ghost{background:transparent}
+html[data-theme="light"] .switch input:checked+i{background:#32d74b}
+html[data-theme="light"] .kind-chip{background:rgba(20,22,43,.08);color:var(--fg)}
+html[data-theme="light"] .upbar{background:rgba(255,255,255,.75);color:var(--fg)}
+html[data-theme="light"] .upbar strong{color:var(--fg)}
+html[data-theme="light"] :focus-visible{outline-color:#d9820f}
+/* under the video */
+html[data-theme="light"] .pill{background:rgba(255,255,255,.7);border-color:rgba(20,22,43,.08);color:var(--fg);box-shadow:0 1px 3px rgba(20,22,43,.06)}
+html[data-theme="light"] .pill:hover{background:#fff}
+html[data-theme="light"] .ambient{opacity:.5;filter:blur(70px) saturate(1.5)}
+html[data-theme="light"] .stage{box-shadow:0 0 0 .5px rgba(20,22,43,.08),0 24px 60px rgba(20,22,43,.22)}
+/* the player keeps its dark look in both modes */
+html[data-theme="light"] .stage:not(.is-empty){--fg:#f5f5f7;--muted:rgba(235,235,245,.6);--faint:rgba(235,235,245,.3);--panel-2:rgba(255,255,255,.085);--panel-3:rgba(255,255,255,.13);--line:rgba(255,255,255,.08);color:var(--fg);color-scheme:dark}
+html[data-theme="light"] .stage.is-empty{background:rgba(255,255,255,.55);box-shadow:0 0 0 .5px rgba(20,22,43,.08),0 20px 50px rgba(20,22,43,.12)}
+html[data-theme="light"] .empty{background:radial-gradient(55% 70% at 25% 0%, rgba(120,140,255,.25), transparent 70%),radial-gradient(50% 70% at 85% 100%, rgba(255,175,70,.2), transparent 70%)}
+html[data-theme="light"] .sample{background:rgba(255,255,255,.75);color:var(--fg);box-shadow:0 1px 3px rgba(20,22,43,.06)}
+html[data-theme="light"] .sample:hover{background:#fff}
+/* pages */
+html[data-theme="light"] .card,html[data-theme="light"] .shot,html[data-theme="light"] .settings{background:var(--glass-light);border-color:rgba(20,22,43,.07);box-shadow:0 1px 3px rgba(20,22,43,.05)}
+html[data-theme="light"] .card:hover{background:rgba(255,255,255,.9)}
+html[data-theme="light"] .card .url{color:var(--faint)}
+html[data-theme="light"] .prog{background:rgba(20,22,43,.1)}
+html[data-theme="light"] .settings > .set{border-bottom-color:rgba(20,22,43,.08)}
+html[data-theme="light"] .search,html[data-theme="light"] .set select,html[data-theme="light"] .sub-style select,html[data-theme="light"] .sub-style input[type=color],
+html[data-theme="light"] .acct input,html[data-theme="light"] .logo-name,html[data-theme="light"] .ss-form input,html[data-theme="light"] .ss-form select{background:rgba(20,22,43,.06);color:var(--fg)}
+html[data-theme="light"] .switch i{background:rgba(20,22,43,.16)}
+html[data-theme="light"] .logo-thumb{background:repeating-conic-gradient(#e3e6ef 0% 25%,#f4f6fb 0% 50%) 50%/14px 14px}
+html[data-theme="light"] dialog{background:rgba(255,255,255,.9);color:var(--fg);border-color:rgba(20,22,43,.08);box-shadow:0 30px 80px rgba(20,22,43,.25)}
+html[data-theme="light"] dialog::backdrop{background:rgba(20,22,43,.25)}
+html[data-theme="light"] .keys kbd{background:rgba(20,22,43,.07);color:var(--fg)}
+html[data-theme="light"] .toast{background:rgba(255,255,255,.92);color:var(--fg);box-shadow:0 12px 40px rgba(20,22,43,.18)}
+html[data-theme="light"] .ss-tag{background:rgba(20,22,43,.07)}
+html[data-theme="light"] .lightbox{background:rgba(238,241,248,.95)}
 </style>
 </head>
 <body>
@@ -857,6 +935,8 @@ dialog{background:rgba(24,26,44,.88);backdrop-filter:blur(30px) saturate(1.5)}
   <section class="view" id="view-settings" hidden>
     <div class="vhead"><div><h1>Settings</h1><p>Saved on this computer.</p></div></div>
     <div class="settings">
+      <div class="set"><div class="d"><strong>Appearance</strong><span>Light, dark, or follow Windows. The video itself always sits on dark.</span></div>
+        <div class="seg" id="setTheme" role="radiogroup" aria-label="Appearance"><button role="radio" data-theme-opt="light">Light</button><button role="radio" data-theme-opt="dark">Dark</button><button role="radio" data-theme-opt="system">Match Windows</button></div></div>
       <div class="set"><div class="d"><strong>Skip interval</strong><span>How far the back and forward buttons jump.</span></div>
         <select id="setSkip"><option value="5">5 seconds</option><option value="10">10 seconds</option><option value="15">15 seconds</option><option value="30">30 seconds</option><option value="60">60 seconds</option></select></div>
       <div class="set"><div class="d"><strong>Default speed</strong><span>Speed every new video starts at.</span></div>
@@ -1018,9 +1098,21 @@ const store = {
   get(k, d){ try { const x = localStorage.getItem("crave:" + k); return x == null ? d : JSON.parse(x); } catch { return d; } },
   set(k, val){ try { localStorage.setItem("crave:" + k, JSON.stringify(val)); } catch {} }
 };
-const DEF = { wm:{ pos:"tl", size:12, opacity:100, margin:3, preview:true, last:null }, audio:{ decoder:"auto", surround:false, night:false, dialogue:false }, ambient:true, sidecarSubs:true, saveSubs:true, subLang:"en", shotSubs:true, subStyle:{ color:"#ffffff", edge:"shadow", bg:"none", bgColor:"#000000", bgOpacity:60 }, hdr:"off", subSize:"medium", autoSubs:true, skip:10, speed:1, fmt:"image/png", autoDl:false, resume:true, autoNext:true, stats:true, volume:1, muted:false };
+const DEF = { wm:{ pos:"tl", size:12, opacity:100, margin:3, preview:true, last:null }, audio:{ decoder:"auto", surround:false, night:false, dialogue:false }, theme:"dark", ambient:true, sidecarSubs:true, saveSubs:true, subLang:"en", shotSubs:true, subStyle:{ color:"#ffffff", edge:"shadow", bg:"none", bgColor:"#000000", bgOpacity:60 }, hdr:"off", subSize:"medium", autoSubs:true, skip:10, speed:1, fmt:"image/png", autoDl:false, resume:true, autoNext:true, stats:true, volume:1, muted:false };
 const S = Object.assign({}, DEF, store.get("settings", {}));
 const saveSettings = () => store.set("settings", S);
+// Appearance: light, dark, or follow Windows. Set before anything draws so there is no flash.
+const lightMQ = (() => { try { return matchMedia("(prefers-color-scheme: light)"); } catch { return null; } })();
+function applyTheme(){
+  const m = S.theme || "dark";
+  const light = m === "light" || (m === "system" && !!lightMQ && lightMQ.matches);
+  document.documentElement.dataset.theme = light ? "light" : "dark";
+  document.querySelectorAll("[data-theme-opt]").forEach(b => b.setAttribute("aria-checked", String(b.dataset.themeOpt === m)));
+  if (window.craveNative && window.craveNative.setTheme) window.craveNative.setTheme(m);
+}
+if (lightMQ) lightMQ.addEventListener("change", () => { if ((S.theme || "dark") === "system") applyTheme(); });
+applyTheme();
+document.addEventListener("click", e => { const b = e.target.closest("[data-theme-opt]"); if (b) { S.theme = b.dataset.themeOpt; saveSettings(); applyTheme(); } });
 let library = store.get("library", []);           // [{id,url,name,kind,pos,dur,updated,marks:[{t,label}]}]
 const saveLib = () => { store.set("library", library.slice(0, 300)); renderLibCount(); };
 

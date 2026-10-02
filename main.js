@@ -84,7 +84,7 @@ function start(){
 function createWindow(){
   win = new BrowserWindow({
     width: 1360, height: 860, minWidth: 420, minHeight: 420,
-    backgroundColor: "#0c0b14", title: "Crave", show: false,
+    backgroundColor: (applySavedTheme(), savedTheme() === "light" ? "#eef1f8" : "#0c0b14"), title: "Crave", show: false,
     icon: path.join(__dirname, "build", "icon.png"),
     autoHideMenuBar: true,
     webPreferences: {
@@ -299,6 +299,19 @@ function parseProbe(text){
 /* ---------- network inputs: keep reading through dropped connections and slow servers ---------- */
 const NET_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 const netIn = input => /^https?:/i.test(String(input || "")) ? ["-user_agent", NET_UA, "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_on_network_error", "1", "-reconnect_on_http_error", "5xx", "-reconnect_delay_max", "8", "-rw_timeout", "30000000"] : [];
+/* ---------- appearance: Windows title bar and window colour follow the app's light/dark choice ---------- */
+const themeFile = () => path.join(app.getPath("userData"), "theme.json");
+// The Windows title bar follows nativeTheme, so set it from the saved choice before the window appears.
+function applySavedTheme(){ try { const m = JSON.parse(fs.readFileSync(themeFile(), "utf8")).mode; require("electron").nativeTheme.themeSource = ["light", "dark", "system"].includes(m) ? m : "dark"; } catch { require("electron").nativeTheme.themeSource = "dark"; } }
+function savedTheme(){ try { const m = JSON.parse(fs.readFileSync(themeFile(), "utf8")).mode; if (m === "light" || m === "system") return m === "system" ? (require("electron").nativeTheme.shouldUseDarkColors ? "dark" : "light") : m; } catch {} return "dark"; }
+ipcMain.handle("set-theme", (e, m) => {
+  const { nativeTheme, BrowserWindow } = require("electron");
+  m = ["light", "dark", "system"].includes(m) ? m : "dark";
+  nativeTheme.themeSource = m;
+  try { fs.writeFileSync(themeFile(), JSON.stringify({ mode: m })); } catch {}
+  const w = BrowserWindow.fromWebContents(e.sender);
+  if (w) w.setBackgroundColor(nativeTheme.shouldUseDarkColors ? "#0c0b14" : "#eef1f8");
+});
 ipcMain.handle("probe", (_e, input) => new Promise(resolve => {
   const p = spawn(ffmpegPath(), ["-hide_banner", "-nostdin", ...netIn(input), "-i", input], { windowsHide: true });
   let err = "";
