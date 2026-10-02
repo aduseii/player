@@ -566,6 +566,97 @@ dialog h3{font:700 22px var(--f-head);letter-spacing:-.02em}
 .toast.bad{box-shadow:inset 3px 0 0 var(--bad),0 12px 40px rgba(0,0,0,.5)}
 .lightbox{background:rgba(0,0,0,.92)}
 @media (prefers-reduced-motion:reduce){.hud,.titlebar,.bigplay{transition:none}}
+/* ================================================================
+   Crave look 2: night blue instead of flat black, colour from the video.
+   Night-blue base with soft light pools, frosted glass that picks up
+   the colour behind it, honey (the dot in the logo) for main actions
+   and progress. In a window the picture is clean and the title sits
+   under it; full screen keeps the title over the picture.
+   ================================================================ */
+:root{
+  --night:#080a14;
+  --panel:rgba(255,255,255,.055);
+  --panel-2:rgba(255,255,255,.085);
+  --panel-3:rgba(255,255,255,.13);
+  --line:rgba(255,255,255,.08);
+  --glass:rgba(22,24,40,.6);
+  --glass-line:rgba(255,255,255,.12);
+  --honey:#ffc04d; --honey-2:#ff9a2e; --honey-ink:#1f1300;
+}
+html{background:var(--night)}
+body{background:
+  radial-gradient(900px 620px at 8% -8%, rgba(78,96,255,.24), transparent 62%),
+  radial-gradient(800px 560px at 96% 4%, rgba(176,72,255,.15), transparent 60%),
+  radial-gradient(900px 700px at 60% 112%, rgba(0,190,200,.10), transparent 60%),
+  var(--night);
+  background-attachment:fixed}
+main{overflow-x:clip}
+:focus-visible{outline-color:var(--honey)}
+
+.top{background:rgba(10,12,26,.55);backdrop-filter:blur(28px) saturate(1.6);box-shadow:0 .5px 0 rgba(255,255,255,.06)}
+.brand b{color:var(--honey)}
+.tabs{background:rgba(255,255,255,.07);backdrop-filter:blur(20px)}
+.tab[aria-selected="true"]{background:rgba(255,255,255,.92);color:#0b0d1a;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+.tab[aria-selected="true"] .count{color:rgba(11,13,26,.5)}
+.top .linkbar .field{background:rgba(255,255,255,.08);backdrop-filter:blur(20px)}
+.top .linkbar .field:focus-within{box-shadow:0 0 0 2px rgba(255,192,77,.55)}
+.btn{background:rgba(255,255,255,.09);backdrop-filter:blur(20px)}
+.btn.primary,.top .linkbar .go,.menu .delay .btn.primary,.clip-actions .btn.primary{background:linear-gradient(180deg,var(--honey),var(--honey-2));color:var(--honey-ink)}
+.btn.primary:hover,.top .linkbar .go:hover{background:linear-gradient(180deg,#ffcd6e,#ffa846)}
+.upbar{background:rgba(22,24,40,.7);backdrop-filter:blur(24px)}
+
+/* the player: lifted off the page, with the video's own colours glowing behind it */
+.watch{position:relative}
+.stage{position:relative;z-index:1;border-radius:18px;box-shadow:0 0 0 .5px rgba(255,255,255,.07),0 30px 80px rgba(0,0,0,.45)}
+.stage:not(.is-empty){height:calc(100dvh - var(--chrome-h,72px) - 24px - var(--info-h,0px))}
+.stage:fullscreen{border-radius:0;box-shadow:none}
+.ambient{position:absolute;z-index:0;left:-4%;width:108%;top:-40px;height:calc(100dvh - var(--chrome-h,72px) - 24px - var(--info-h,0px) + 80px);
+  filter:blur(64px) saturate(1.7) brightness(1.05);opacity:.7;pointer-events:none;transition:opacity .8s}
+.ambient[hidden]{display:block;opacity:0}
+.stage.is-empty{background:rgba(255,255,255,.035);backdrop-filter:blur(30px)}
+.stage.is-empty video{visibility:hidden}
+.empty{background:
+  radial-gradient(55% 70% at 25% 0%, rgba(92,108,255,.28), transparent 70%),
+  radial-gradient(50% 70% at 85% 100%, rgba(255,170,60,.16), transparent 70%)}
+.sample{background:rgba(255,255,255,.08);backdrop-filter:blur(20px)}
+
+/* in a window: nothing over the top of the picture */
+.stage:not(:fullscreen) .titlebar{display:none}
+.stage:not(:fullscreen) .tstats{top:16px}
+
+/* title and actions under the video */
+.nowbar:not([hidden]){display:block!important;position:relative;z-index:1;margin:14px 2px 0}
+.now-title{font:650 21px/1.25 var(--f-head);letter-spacing:-.015em;margin:0 0 10px;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.now-row{display:flex;align-items:center;justify-content:space-between;gap:10px 16px;flex-wrap:wrap}
+.now-meta{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
+.now-meta .sub{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums;white-space:pre-wrap}
+.now-meta .hdr-chip{background:linear-gradient(180deg,var(--honey),var(--honey-2));color:var(--honey-ink)}
+.now-actions{display:flex;gap:8px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 16px;border-radius:999px;border:.5px solid rgba(255,255,255,.1);
+  background:rgba(255,255,255,.09);backdrop-filter:blur(24px) saturate(1.6);color:var(--fg);font:600 13.5px var(--f-ui);cursor:pointer;transition:background .15s}
+.pill:hover{background:rgba(255,255,255,.16)}
+.pill svg.i{width:18px;height:18px}
+.pill.icon{width:38px;padding:0;justify-content:center}
+.pill[hidden]{display:none}
+
+/* progress and "on" states in honey */
+.seek .played{background:linear-gradient(90deg,var(--honey-2),var(--honey))}
+.seek .knob{box-shadow:0 0 0 4px rgba(255,192,77,.35),0 2px 8px rgba(0,0,0,.5)}
+.vol input{accent-color:var(--honey)}
+.prog i{background:linear-gradient(90deg,var(--honey-2),var(--honey))}
+.hud{background:linear-gradient(transparent,rgba(6,8,20,.42) 40%,rgba(6,8,20,.78))}
+
+/* frosted surfaces everywhere else */
+.menu,.drawer,.banner,.osd,.tstats,.seek .tip{background:var(--glass)}
+.card,.shot{background:var(--panel);border:.5px solid var(--line);backdrop-filter:blur(24px)}
+.card:hover{background:rgba(255,255,255,.085)}
+.settings{background:var(--panel);border:.5px solid var(--line);backdrop-filter:blur(24px)}
+.settings > .note{background:transparent}
+.search,.set select,.sub-style select,.sub-style input[type=color],.acct input,.logo-name,.ss-form input,.ss-form select{background:rgba(255,255,255,.08)}
+dialog{background:rgba(24,26,44,.88);backdrop-filter:blur(30px) saturate(1.5)}
+.toast{background:rgba(30,32,52,.88)}
+.speed-sel option{background:#1b1d30}
+.errbox{background:rgba(8,10,20,.82)}
 </style>
 </head>
 <body>
@@ -631,7 +722,8 @@ dialog h3{font:700 22px var(--f-head);letter-spacing:-.02em}
 
 
     <div class="board">
-      <div style="min-width:0">
+      <div class="watch" style="min-width:0">
+        <canvas id="ambient" class="ambient" width="48" height="27" aria-hidden="true" hidden></canvas>
         <div class="stage is-empty" id="stage" tabindex="-1">
           <video id="video" playsinline preload="metadata"></video>
           <canvas id="hdrLayer" hidden></canvas>
@@ -716,10 +808,18 @@ dialog h3{font:700 22px var(--f-head);letter-spacing:-.02em}
         </div>
 
         <div class="nowbar" id="nowbar" hidden>
-          <div class="meta"><div class="name" id="nowName"></div><div class="sub" id="nowSub"></div></div>
-          <button class="btn sm" id="copyLinkBtn"><svg class="i"><use href="#i-copy"/></svg>Copy link</button>
-          <button class="btn sm" id="subBtn"><svg class="i"><use href="#i-cc"/></svg>Add subtitles</button>
-          <button class="btn sm ghost" id="stopBtn"><svg class="i"><use href="#i-x"/></svg>Close</button>
+          <h1 class="now-title" id="nowName"></h1>
+          <div class="now-row">
+            <div class="now-meta"><span class="kind-chip" id="nowKind"></span><span class="kind-chip hdr-chip" id="nowHdr" hidden></span><span class="sub" id="nowSub"></span></div>
+            <div class="now-actions">
+              <button class="pill" id="nowShot"><svg class="i"><use href="#i-cam"/></svg>Screenshot</button>
+              <button class="pill" id="nowClip"><svg class="i"><use href="#i-cut"/></svg>Clip</button>
+              <button class="pill" id="nowFind" hidden><svg class="i"><use href="#i-cc"/></svg>Find subtitles</button>
+              <button class="pill" id="subBtn"><svg class="i"><use href="#i-plus"/></svg>Add subtitles</button>
+              <button class="pill" id="copyLinkBtn"><svg class="i"><use href="#i-copy"/></svg>Copy link</button>
+              <button class="pill icon" id="stopBtn" title="Close video" aria-label="Close video"><svg class="i"><use href="#i-x"/></svg></button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -809,6 +909,8 @@ dialog h3{font:700 22px var(--f-head);letter-spacing:-.02em}
         <label class="switch"><input type="checkbox" id="setSidecar"><i></i></label></div>
       <div class="set" id="saveSubsRow" hidden><div class="d"><strong>Save downloaded subtitles next to the video</strong><span>Keeps a copy (Movie.en.srt) so it loads next time, here and in other players.</span></div>
         <label class="switch"><input type="checkbox" id="setSaveSubs"><i></i></label></div>
+      <div class="set"><div class="d"><strong>Ambient glow</strong><span>Lights the space around the player with colours from the video.</span></div>
+        <label class="switch"><input type="checkbox" id="setAmbient"><i></i></label></div>
       <div class="set"><div class="d"><strong>Subtitles in screenshots</strong><span>Draw the subtitle on screen into saved screenshots.</span></div>
         <label class="switch"><input type="checkbox" id="setShotSubs"><i></i></label></div>
       <div class="set"><div class="d"><strong>Subtitle font</strong><span id="subFontText">Checking for Netflix Sans…</span></div>
@@ -915,7 +1017,7 @@ const store = {
   get(k, d){ try { const x = localStorage.getItem("crave:" + k); return x == null ? d : JSON.parse(x); } catch { return d; } },
   set(k, val){ try { localStorage.setItem("crave:" + k, JSON.stringify(val)); } catch {} }
 };
-const DEF = { wm:{ pos:"tl", size:12, opacity:100, margin:3, preview:true, last:null }, audio:{ decoder:"auto", surround:false, night:false, dialogue:false }, sidecarSubs:true, saveSubs:true, subLang:"en", shotSubs:true, subStyle:{ color:"#ffffff", edge:"shadow", bg:"none", bgColor:"#000000", bgOpacity:60 }, hdr:"off", subSize:"medium", autoSubs:true, skip:10, speed:1, fmt:"image/png", autoDl:false, resume:true, autoNext:true, stats:true, volume:1, muted:false };
+const DEF = { wm:{ pos:"tl", size:12, opacity:100, margin:3, preview:true, last:null }, audio:{ decoder:"auto", surround:false, night:false, dialogue:false }, ambient:true, sidecarSubs:true, saveSubs:true, subLang:"en", shotSubs:true, subStyle:{ color:"#ffffff", edge:"shadow", bg:"none", bgColor:"#000000", bgOpacity:60 }, hdr:"off", subSize:"medium", autoSubs:true, skip:10, speed:1, fmt:"image/png", autoDl:false, resume:true, autoNext:true, stats:true, volume:1, muted:false };
 const S = Object.assign({}, DEF, store.get("settings", {}));
 const saveSettings = () => store.set("settings", S);
 let library = store.get("library", []);           // [{id,url,name,kind,pos,dur,updated,marks:[{t,label}]}]
@@ -1240,6 +1342,24 @@ $("#fullBtn").onclick = toggleFull;
 $("#ccBtn").onclick = () => openMenu("subs");
 $("#audioBtn").onclick = () => openMenu("audio");
 $("#subBtn").onclick = () => $("#subInput").click();
+$("#nowShot").onclick = () => $("#shotBtn").click();
+$("#nowClip").onclick = () => $("#clipBtn").click();
+$("#nowFind").onclick = () => openSubSearch();
+// The picture gets the window height minus the info row under it, so the title is always in view.
+function fitStage(){ const nb = $("#nowbar"); document.documentElement.style.setProperty("--info-h", (nb.hidden ? 0 : nb.offsetHeight + 14) + "px"); }
+try { new ResizeObserver(fitStage).observe($("#nowbar")); } catch {}
+v.addEventListener("loadedmetadata", () => renderNow());
+/* ambient glow: the page behind the player takes its colours from the picture */
+const amb = $("#ambient"), ambCtx = amb.getContext("2d");
+let ambT = 0;
+function ambient(){
+  const on = S.ambient !== false && cur && v.videoWidth && !document.fullscreenElement && !$("#view-board").hidden;
+  amb.hidden = !on; if (!on) return;
+  try { ambCtx.globalAlpha = ambT ? 0.35 : 1; ambCtx.drawImage(v, 0, 0, amb.width, amb.height); ambT = 1; } catch {}
+}
+setInterval(() => { if (!v.paused) ambient(); }, 300);
+["seeked", "loadeddata", "pause", "play"].forEach(ev => v.addEventListener(ev, () => { ambT = 0; ambient(); }));
+document.addEventListener("fullscreenchange", ambient);
 $("#stopBtn").onclick = stop;
 $("#closeBtn").onclick = stop;
 $("#bigPlay").onclick = () => togglePlay();
@@ -1517,9 +1637,16 @@ function renderRail(){
 function renderNow(){
   if (!cur) return;
   $("#nowName").textContent = cur.name;
-  $("#nowSub").textContent = KIND_LABEL[cur.kind] + (cur.url ? " · " + cur.url.replace(/^magnet:\?xt=urn:btih:/, "magnet ").slice(0, 120) : cur.file ? " · " + fmtBytes(cur.file.size) : "");
+  $("#nowKind").textContent = KIND_LABEL[cur.kind];
+  const P = cur.probe, vt = P && P.video && P.video[0], at = P && P.audio && P.audio[cur.audioIdx || 0];
+  const w = v.videoWidth || (vt && vt.w), h = v.videoHeight || (vt && vt.h), d = isFinite(v.duration) && v.duration ? v.duration : P && P.duration;
+  const res = h ? (h >= 2000 ? "4K" : h >= 1400 ? "1440p" : h >= 1000 ? "1080p" : h >= 700 ? "720p" : h + "p") : "";
+  $("#nowSub").textContent = [d ? fmt(d) : "", res, vt && vt.cname, at && (at.cname || "").replace(/ \(.*\)$/, ""), cur.file ? fmtBytes(cur.file.size) : ""].filter(Boolean).join("   ");
+  $("#nowHdr").hidden = !srcHDR(); $("#nowHdr").textContent = srcHDR();
+  $("#nowFind").hidden = !(N && N.subsSearch);
   $("#stageTitle").textContent = cur.name; $("#stageKind").textContent = KIND_LABEL[cur.kind]; $("#stageKind").hidden = false;
   $("#copyLinkBtn").hidden = !cur.url;
+  fitStage();
   document.title = cur.name + " · Crave";
 }
 
@@ -1576,7 +1703,7 @@ function bindSettings(){
   const sel = (id, key, num) => { const el = $(id); el.value = String(S[key]); el.onchange = () => { S[key] = num ? +el.value : el.value; saveSettings(); renderSkipLabels(); }; };
   const sw = (id, key, after) => { const el = $(id); el.checked = !!S[key]; el.onchange = () => { S[key] = el.checked; saveSettings(); after && after(); }; };
   sel("#setSkip", "skip", true); sel("#setSpeed", "speed", true); sel("#setFmt", "fmt");
-  sw("#setAutoDl", "autoDl"); sw("#setShotSubs", "shotSubs"); sw("#setSidecar", "sidecarSubs"); sw("#setSaveSubs", "saveSubs"); sw("#setResume", "resume"); sw("#setAutoSubs", "autoSubs"); sw("#setAutoNext", "autoNext"); sw("#setStats", "stats", () => { if (cur && cur.torrent) renderStats(); });
+  sw("#setAutoDl", "autoDl"); sw("#setShotSubs", "shotSubs"); sw("#setAmbient", "ambient", () => ambient()); sw("#setSidecar", "sidecarSubs"); sw("#setSaveSubs", "saveSubs"); sw("#setResume", "resume"); sw("#setAutoSubs", "autoSubs"); sw("#setAutoNext", "autoNext"); sw("#setStats", "stats", () => { if (cur && cur.torrent) renderStats(); });
 }
 
 /* ---------------- input: link bar, files, drop, paste ---------------- */
@@ -2325,8 +2452,23 @@ v.addEventListener("timeupdate", () => {
   // Big gaps jump; small ones are closed by running the sound 3% faster or slower for a moment (no clicks).
   if (Math.abs(drift) > .5 || (!ext.live && ext.a.readyState > 1 && Math.abs(drift) > .25)) { ext.live ? ext.seek(want) : (ext.a.currentTime = want); ext.a.playbackRate = v.playbackRate; }
   else ext.a.playbackRate = Math.abs(drift) > .025 ? v.playbackRate * (drift > 0 ? .97 : 1.03) : v.playbackRate;
-  if (ext.live) { ext.flow(); if (ext.a.paused && ext.a.readyState > 2) ext.a.play().catch(() => {}); }
+  if (ext.live) { ext.flow(); ext.watch(); if (ext.a.paused && ext.a.readyState > 2) ext.a.play().catch(() => {}); }
 });
+// Built-in sound that stops partway (seen with some streamed MKVs): hand the sound to Crave's decoder.
+const nat = { id: null, d: -1, t: 0 };
+v.addEventListener("seeking", () => { nat.t = v.currentTime; });
+setInterval(() => {
+  if (!cur || ext || v.paused || v.readyState < 3 || !("webkitAudioDecodedByteCount" in v)) return;
+  if (nat.id !== cur.id) { nat.id = cur.id; nat.d = -1; nat.t = v.currentTime; cur.natSwitched = false; }
+  const d = v.webkitAudioDecodedByteCount;
+  if (d !== nat.d) { nat.d = d; nat.t = v.currentTime; return; }
+  const P = cur.probe;
+  if (d > 0 && v.currentTime - nat.t > 4 && !cur.natSwitched && P && P.audio && P.audio.length && nativeInput()) {
+    cur.natSwitched = true;
+    console.info("Crave: built-in sound stopped at " + nat.t.toFixed(1) + " s; switching to Crave's decoder");
+    if (startLive(cur.audioIdx || 0)) toast("The sound stopped, so Crave's decoder took over.");
+  }
+}, 1000);
 
 /* ================= subtitles on screen: Netflix-style text and PGS pictures ================= */
 const subsBottom = $("#subsBottom"), subsTop = $("#subsTop"), pgsCanvas = $("#pgsLayer");
@@ -2740,7 +2882,8 @@ function startLive(ai){
   if (!inp || !window.MediaSource || !N.astreamStart) return false;
   detachExt(true);
   const a = new Audio(), ms = new MediaSource();
-  const L = { a, ai, live: true, sb: null, q: [], id: 0, held: false, offset: null, url: URL.createObjectURL(ms), lastRestart: 0, restartAt: -1 };
+  const L = { a, ai, live: true, sb: null, q: [], id: 0, held: false, offset: null, url: URL.createObjectURL(ms), lastRestart: 0, restartAt: -1,
+    ended: null, lastData: performance.now(), gotThis: 0, fails: 0, retryAt: 0 };
   a.preload = "auto"; a.src = L.url; a.playbackRate = v.playbackRate;
   L.ahead = () => { const t = a.currentTime, b = a.buffered; for (let i = 0; i < b.length; i++) if (b.start(i) <= t + 0.3 && b.end(i) >= t) return b.end(i) - t; return 0; };
   L.has = t => { const b = a.buffered; for (let i = 0; i < b.length; i++) if (b.start(i) <= t + 0.05 && b.end(i) > t + 1) return true; return false; };
@@ -2770,6 +2913,7 @@ function startLive(ai){
   };
   L.restart = t => {
     L.id = ++liveSeq; L.q = []; L.held = false; L.lastRestart = performance.now(); L.restartAt = t;
+    L.ended = null; L.lastData = performance.now(); L.gotThis = 0;
     if (L.sb) { try { L.sb.abort(); } catch {} }
     L.offset = t; L.pump();
     N.astreamStart(Object.assign({ id: L.id, input: inp, track: ai, start: Math.max(0, t) }, audioOpts(ai)));
@@ -2779,6 +2923,22 @@ function startLive(ai){
     const recent = performance.now() - L.lastRestart < 1500 && Math.abs(L.restartAt - t) < 3;
     if (!recent) L.restart(t);
     a.currentTime = t;
+  };
+  // Where the sound we already have runs out (from the current spot).
+  L.bufEnd = () => { const t = a.currentTime, b = a.buffered; for (let i = 0; i < b.length; i++) if (b.start(i) <= t + 0.3 && b.end(i) >= t) return b.end(i); return t; };
+  // Called 4x a second while playing: picks up again if the stream stopped early or went quiet.
+  L.watch = () => {
+    if (!L.sb || L.sb.updating || L.q.length) return;
+    const now = performance.now(), dur = (isFinite(v.duration) && v.duration) || (cur && cur.probe && cur.probe.duration) || 0;
+    const end = L.bufEnd(), ahead = end - a.currentTime;
+    if (dur && end >= dur - 1) return;                       // the sound really is finished
+    const stalled = !L.ended && !L.held && now - L.lastData > 12000 && ahead < 3;
+    if (!(L.ended || stalled) || ahead > 4 || now < L.retryAt) return;
+    if (!L.gotThis) L.fails++; else L.fails = 0;
+    if (L.fails >= 4) { liveGaveUp(L); return; }
+    L.retryAt = now + 1500 * (L.fails + 1);
+    console.info("Crave: sound stream " + (stalled ? "went quiet" : "stopped early") + "; continuing from " + end.toFixed(1) + " s");
+    L.restart(end);
   };
   ms.addEventListener("sourceopen", () => {
     try { L.sb = ms.addSourceBuffer('audio/mp4; codecs="mp4a.40.2"'); } catch { return; }
@@ -2793,10 +2953,18 @@ function startLive(ai){
   return true;
 }
 if (N && N.onAstreamData) {
-  N.onAstreamData((id, d) => { if (ext && ext.live && id === ext.id) { ext.q.push(d instanceof Uint8Array ? d : new Uint8Array(d)); ext.pump(); } });
-  N.onAstreamEnd((id, code, msg) => {
-    if (ext && ext.live && id === ext.id && code && code > 0) showBanner({ id: "audio", bad: true, text: "This audio track couldn't be played (" + (msg || "ffmpeg error") + ").", actions: [{ label: "Dismiss", fn: () => hideBanner("audio") }] });
-  });
+  N.onAstreamData((id, d) => { if (ext && ext.live && id === ext.id) { ext.lastData = performance.now(); ext.gotThis += d.byteLength || d.length || 0; ext.q.push(d instanceof Uint8Array ? d : new Uint8Array(d)); ext.pump(); } });
+  // An early end is picked up again by the watchdog; it only gives up after repeated failures.
+  N.onAstreamEnd((id, code, msg) => { if (ext && ext.live && id === ext.id) ext.ended = { code, msg: msg || "" }; });
+}
+function liveGaveUp(L){
+  const msg = (L.ended && L.ended.msg) || "the stream stopped sending sound";
+  const t = cur && cur.probe && cur.probe.audio && cur.probe.audio[L.ai];
+  if (t && t.supported && L.ai === 0 && !wantsCrave()) { detachExt(); toast("Crave's decoder couldn't keep reading this stream, so the built-in player is playing the sound."); return; }
+  L.retryAt = Infinity;
+  showBanner({ id: "audio", bad: true, text: "The sound for this video keeps cutting out (" + msg + "). The server may be busy.", actions: [
+    { label: "Try again", fn: () => { hideBanner("audio"); L.fails = 0; L.retryAt = 0; L.restart(L.bufEnd()); } },
+    { label: "Dismiss", fn: () => hideBanner("audio") }] });
 }
 
 /* ---- reading tracks with the desktop app's ffmpeg (files, links, torrents) ---- */
@@ -2815,7 +2983,7 @@ async function inspectNative(){
   };
   cur.probe = P; if (clip.on && !clip.busy) renderClip();
   const ai = pickAudio(P.audio);
-  cur.audioIdx = ai;
+  cur.audioIdx = ai; renderNow();
   $("#audioBtn").hidden = !P.audio.length;
   if (P.audio.length && (ai !== 0 || !P.audio[ai].supported || wantsCrave()) && !ext) startLive(ai);
   const vt = P.video[0];

@@ -205,7 +205,7 @@ ipcMain.handle("convert-audio", async (e, { input, track, copy, duration }) => {
   let lastErr;
   for (const [mode, ext] of modes) {
     const out = path.join(TMP, `audio-${Date.now()}-${track}.${ext}`);
-    const args = ["-hide_banner", "-nostdin", "-y", "-i", input, "-map", `0:a:${track}`, "-vn", "-sn", "-dn"]
+    const args = ["-hide_banner", "-nostdin", "-y", ...netIn(input), "-i", input, "-map", `0:a:${track}`, "-vn", "-sn", "-dn"]
       .concat(mode === "copy" ? ["-c:a", "copy"] : ["-c:a", "aac", "-b:a", "192k", "-ac", "2"])
       .concat(["-progress", "pipe:1", "-nostats", out]);
     try {
@@ -296,8 +296,11 @@ function parseProbe(text){
   }
   return res;
 }
+/* ---------- network inputs: keep reading through dropped connections and slow servers ---------- */
+const NET_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
+const netIn = input => /^https?:/i.test(String(input || "")) ? ["-user_agent", NET_UA, "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_on_network_error", "1", "-reconnect_on_http_error", "5xx", "-reconnect_delay_max", "8", "-rw_timeout", "30000000"] : [];
 ipcMain.handle("probe", (_e, input) => new Promise(resolve => {
-  const p = spawn(ffmpegPath(), ["-hide_banner", "-nostdin", "-i", input], { windowsHide: true });
+  const p = spawn(ffmpegPath(), ["-hide_banner", "-nostdin", ...netIn(input), "-i", input], { windowsHide: true });
   let err = "";
   const kill = setTimeout(() => { try { p.kill(); } catch {} }, 20000);
   p.stderr.on("data", d => { err += d; });
@@ -317,7 +320,7 @@ ipcMain.handle("astream-start", (e, { id, input, track, start, channels = 2, nig
   af.push(`aformat=channel_layouts=${surround ? "5.1" : "stereo"}`);
   if (dialogue) af.push(surround ? "pan=5.1|FL=FL|FR=FR|FC=1.7*FC|LFE=LFE|BL=BL|BR=BR" : "dialoguenhance=enhance=2.5,aformat=channel_layouts=stereo");
   if (night) af.push("acompressor=threshold=-26dB:ratio=4:attack=5:release=250:makeup=7dB", "alimiter=limit=0.95:level=disabled");
-  args.push("-i", input, "-map", `0:a:${track}`, "-vn", "-sn", "-dn", "-af", af.join(","),
+  args.push(...netIn(input), "-i", input, "-map", `0:a:${track}`, "-vn", "-sn", "-dn", "-af", af.join(","),
     "-c:a", "aac", "-b:a", surround ? "384k" : "192k", "-ac", surround ? "6" : "2", "-ar", "48000",
     "-f", "mp4", "-movflags", "+empty_moov+default_base_moof", "-frag_duration", "500000", "pipe:1");
   const p = spawn(ffmpegPath(), args, { windowsHide: true });
@@ -337,7 +340,7 @@ const sstreams = new Map();
 ipcMain.handle("sub-start", (e, { id, input, track, start, dur, format }) => {
   const args = ["-hide_banner", "-nostdin", "-loglevel", "error"];
   if (start > 0) args.push("-ss", start.toFixed(3));
-  args.push("-copyts", "-i", input);
+  args.push("-copyts", ...netIn(input), "-i", input);
   if (dur > 0) args.push("-t", dur.toFixed(3));
   args.push("-map", `0:s:${track}`);
   args.push(...(format === "sup" ? ["-c:s", "copy", "-f", "sup"] : ["-c:s", "webvtt", "-f", "webvtt"]), "pipe:1");
@@ -368,7 +371,7 @@ function clipArgs(o, out, { copy, withSubs }){
   const dur = Math.max(0.1, o.end - o.start);
   const lg = o.logo && o.format !== "m4a" && fs.existsSync(logoPath(o.logo.id)) ? o.logo : null;
   // -t comes after every input so it applies to the output, not to the logo
-  const a = ["-hide_banner", "-nostdin", "-y", "-ss", o.start.toFixed(3), "-i", o.input].concat(lg ? ["-i", logoPath(lg.id)] : [], ["-t", dur.toFixed(3)]);
+  const a = ["-hide_banner", "-nostdin", "-y", "-ss", o.start.toFixed(3), ...netIn(o.input), "-i", o.input].concat(lg ? ["-i", logoPath(lg.id)] : [], ["-t", dur.toFixed(3)]);
   const audio = o.audioTrack != null && o.audioTrack >= 0 ? `0:a:${o.audioTrack}` : null;
   if (o.format === "m4a") {
     if (!audio) throw new Error("this video has no sound to save");
