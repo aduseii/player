@@ -422,6 +422,181 @@ ipcMain.handle("open-item", async (_e, p) => { if (!fs.existsSync(p)) return fal
 ipcMain.handle("open-clips-folder", () => { fs.mkdirSync(clipDir(), { recursive: true }); return shell.openPath(clipDir()); });
 ipcMain.handle("items-exist", (_e, list) => list.map(p => { try { return fs.statSync(p).isFile(); } catch { return false; } }));
 
+/* ---------- online subtitle search (OpenSubtitles.com and SubDL) ---------- */
+// Accounts are kept on this computer only; the password is encrypted with Windows' own protection.
+const { safeStorage } = require("electron");
+const credsFile = () => path.join(app.getPath("userData"), "subtitle-accounts.json");
+function readCreds(){ try { return JSON.parse(fs.readFileSync(credsFile(), "utf8")); } catch { return {}; } }
+function writeCreds(c){ fs.mkdirSync(path.dirname(credsFile()), { recursive: true }); fs.writeFileSync(credsFile(), JSON.stringify(c)); }
+function osPassword(c){
+  if (!c.osPass) return "";
+  try { return c.osPassEnc && safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(Buffer.from(c.osPass, "base64")) : Buffer.from(c.osPass, "base64").toString("utf8"); } catch { return ""; }
+}
+ipcMain.handle("subs-creds-get", () => { const c = readCreds(); return { subdl: c.subdl || "", osKey: c.osKey || "", osUser: c.osUser || "", hasPass: !!c.osPass }; });
+ipcMain.handle("subs-creds-set", (_e, patch) => {
+  const c = readCreds();
+  for (const k of ["subdl", "osKey", "osUser"]) if (k in patch) c[k] = String(patch[k] || "").trim();
+  if ("osPass" in patch) {
+    const p = String(patch.osPass || "");
+    if (!p) { delete c.osPass; delete c.osPassEnc; }
+    else if (safeStorage.isEncryptionAvailable()) { c.osPass = safeStorage.encryptString(p).toString("base64"); c.osPassEnc = true; }
+    else { c.osPass = Buffer.from(p, "utf8").toString("base64"); c.osPassEnc = false; }
+  }
+  if ("osKey" in patch || "osUser" in patch || "osPass" in patch) osSession = null;
+  writeCreds(c); return true;
+});
+
+const MOCK = process.env.CRAVE_SUBS_MOCK || "";          // test hook: a local stand-in for both services
+const OS_API = MOCK ? MOCK + "/os/api/v1" : "https://api.opensubtitles.com/api/v1";
+const SUBDL_API = MOCK ? MOCK + "/subdl/api/v1/subtitles" : "https://api.subdl.com/api/v1/subtitles";
+const SUBDL_DL = MOCK ? MOCK + "/subdl/dl" : "https://dl.subdl.com";
+const uaString = () => `Crave v${app.getVersion()}`;
+async function getJSON(url, opts = {}){
+  const res = await net.fetch(url, opts);
+  const text = await res.text();
+  let body = null; try { body = JSON.parse(text); } catch {}
+  if (!res.ok) {
+    const msg = (body && (body.message || body.error || (body.errors && body.errors.join(", ")))) || `${res.status} ${res.statusText}`;
+    const err = new Error(String(msg)); err.status = res.status; throw err;
+  }
+  return body;
+}
+// OpenSubtitles "moviehash": file size plus the 64-bit sums of the first and last 64 KB.
+async function movieHash(p){
+  const st = await fs.promises.stat(p); if (st.size < 131072) return null;
+  const h = await fs.promises.open(p, "r");
+  try {
+    const a = Buffer.alloc(65536), b = Buffer.alloc(65536);
+    await h.read(a, 0, 65536, 0); await h.read(b, 0, 65536, st.size - 65536);
+    let sum = BigInt(st.size); const M = (1n << 64n) - 1n;
+    for (const buf of [a, b]) for (let i = 0; i < 65536; i += 8) sum = (sum + buf.readBigUInt64LE(i)) & M;
+    return sum.toString(16).padStart(16, "0");
+  } finally { await h.close(); }
+}
+let osSession = null, osLoggingIn = null; // { token, base, remaining }
+function osLogin(c){
+  if (!c.osUser || !c.osPass) return Promise.resolve(null);
+  if (osSession) return Promise.resolve(osSession);
+  // searches run side by side; they share one sign-in
+  if (!osLoggingIn) osLoggingIn = osLoginNow(c).finally(() => { osLoggingIn = null; });
+  return osLoggingIn;
+}
+async function osLoginNow(c){
+  const r = await getJSON(OS_API + "/login", { method: "POST", headers: { "Api-Key": c.osKey, "User-Agent": uaString(), "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ username: c.osUser, password: osPassword(c) }) });
+  const base = r.base_url && !MOCK ? `https://${String(r.base_url).replace(/^https?:\/\//, "")}/api/v1` : OS_API;
+  osSession = { token: r.token, base, remaining: r.user && r.user.allowed_downloads };
+  return osSession;
+}
+const osHeaders = (c, s) => Object.assign({ "Api-Key": c.osKey, "User-Agent": uaString(), Accept: "application/json" }, s ? { Authorization: "Bearer " + s.token } : {});
+async function osSearch(c, q){
+  let s = null; try { s = await osLogin(c); } catch (e) { osSession = null; if (e.status === 401) throw new Error("OpenSubtitles didn't accept your username or password"); }
+  const params = {};
+  if (q.hash) params.moviehash = q.hash;
+  if (q.query) params.query = q.query.toLowerCase();
+  if (q.year && !q.season) params.year = q.year;
+  if (q.season) { params.season_number = q.season; params.type = "episode"; }
+  if (q.episode) params.episode_number = q.episode;
+  params.languages = q.lang || "en";
+  params.order_by = "download_count";
+  const qs = Object.keys(params).sort().map(k => `${k}=${encodeURIComponent(params[k])}`).join("&");
+  const r = await getJSON(`${(s && s.base) || OS_API}/subtitles?${qs}`, { headers: osHeaders(c, s) });
+  return (r.data || []).filter(d => d.attributes && d.attributes.files && d.attributes.files.length).map(d => {
+    const a = d.attributes, f = a.feature_details || {};
+    return { provider: "opensubtitles", id: String(a.files[0].file_id), release: a.release || a.files[0].file_name || f.title || "", file: a.files[0].file_name || "",
+      lang: a.language || q.lang, downloads: a.download_count || 0, hi: !!a.hearing_impaired, exact: !!a.moviehash_match, ai: !!(a.ai_translated || a.machine_translated),
+      title: f.movie_name || f.title || "", year: f.year || "", season: f.season_number || null, episode: f.episode_number || null, uploader: a.uploader && a.uploader.name || "" };
+  });
+}
+async function subdlSearch(c, q){
+  const params = new URLSearchParams({ api_key: c.subdl, subs_per_page: "30", languages: (q.lang || "en").split("-")[0].toUpperCase() });
+  if (q.fileName) params.set("file_name", q.fileName);
+  if (q.query) params.set("film_name", q.query);
+  if (q.season) { params.set("type", "tv"); params.set("season_number", q.season); if (q.episode) params.set("episode_number", q.episode); }
+  else { params.set("type", "movie"); if (q.year) params.set("year", q.year); }
+  const r = await getJSON(`${SUBDL_API}?${params}`, { headers: { "User-Agent": uaString(), Accept: "application/json" } });
+  if (r && r.status === false) { if (/not found|no subtitles/i.test(r.error || "")) return []; throw new Error(r.error || "SubDL search failed"); }
+  const t = (r.results && r.results[0]) || {};
+  return (r.subtitles || []).map(sb => ({ provider: "subdl", id: sb.url, release: sb.release_name || sb.name || "", file: sb.name || "",
+    lang: q.lang || "en", downloads: sb.download_count || 0, hi: !!sb.hi, exact: false, ai: false,
+    title: t.name || "", year: t.year || "", season: sb.season || null, episode: sb.episode || null, uploader: sb.author || "", fullSeason: !!sb.full_season }));
+}
+ipcMain.handle("subs-search", async (_e, q) => {
+  const c = readCreds(), jobs = [], errors = [];
+  if (q.path && !q.hash) { try { q.hash = await movieHash(q.path); } catch {} }
+  if (c.osKey) {
+    jobs.push(osSearch(c, q).catch(e => { errors.push("OpenSubtitles: " + e.message); return []; }));
+    // a hash-only search finds exact matches even when the title guess is off
+    if (q.hash && q.query) jobs.push(osSearch(c, { ...q, query: "", year: "" }).catch(() => []));
+  }
+  if (c.subdl) jobs.push(subdlSearch(c, q).catch(e => { errors.push("SubDL: " + e.message); return []; }));
+  if (!jobs.length) return { results: [], errors: [], needsSetup: true };
+  const seen = new Set(), results = [];
+  for (const list of await Promise.all(jobs)) for (const r of list) { const k = r.provider + ":" + r.id; if (!seen.has(k)) { seen.add(k); results.push(r); } }
+  results.sort((a, b) => (b.exact - a.exact) || (b.downloads - a.downloads));
+  return { results, errors, hashed: !!q.hash, osRemaining: osSession && osSession.remaining };
+});
+const SUB_EXT = /\.(srt|ass|ssa|vtt|sub)$/i;
+function pickFromZip(files, q){
+  const names = Object.keys(files).filter(n => SUB_EXT.test(n) && files[n].length > 20);
+  if (!names.length) return null;
+  if (q.season && q.episode) {
+    const re = new RegExp(`(s0*${q.season}[ ._-]*e0*${q.episode}\\b|\\b${q.season}x0*${q.episode}\\b)`, "i");
+    const hit = names.find(n => re.test(n)); if (hit) return hit;
+  }
+  return names.sort((a, b) => (/\.srt$/i.test(b) - /\.srt$/i.test(a)) || files[b].length - files[a].length)[0];
+}
+ipcMain.handle("subs-download", async (_e, { provider, id, lang, season, episode, saveNextTo }) => {
+  const c = readCreds();
+  let name = "subtitle.srt", data = null;
+  if (provider === "opensubtitles") {
+    let s = null; try { s = await osLogin(c); } catch { osSession = null; }
+    let r;
+    try {
+      r = await getJSON(`${(s && s.base) || OS_API}/download`, { method: "POST", headers: Object.assign(osHeaders(c, s), { "Content-Type": "application/json" }), body: JSON.stringify({ file_id: Number(id) || id }) });
+    } catch (e) {
+      if (e.status === 406 || /quota|limit|allowed/i.test(e.message)) throw new Error(`you've used today's OpenSubtitles downloads (${s ? "20 a day with your account" : "5 a day without an account; add your free account in Settings for 20"})`);
+      throw e;
+    }
+    if (s && r.remaining != null) s.remaining = r.remaining;
+    const res = await net.fetch(r.link, { headers: { "User-Agent": uaString() } });
+    if (!res.ok) throw new Error("download failed (" + res.status + ")");
+    data = Buffer.from(await res.arrayBuffer()); name = r.file_name || name;
+    if (data[0] === 0x1f && data[1] === 0x8b) data = require("node:zlib").gunzipSync(data);
+  } else if (provider === "subdl") {
+    const res = await net.fetch(SUBDL_DL + (String(id).startsWith("/") ? id : "/" + id), { headers: { "User-Agent": uaString() } });
+    if (!res.ok) throw new Error("download failed (" + res.status + ")");
+    const buf = new Uint8Array(await res.arrayBuffer());
+    if (buf[0] === 0x50 && buf[1] === 0x4b) {
+      const files = require("fflate").unzipSync(buf);
+      const pick = pickFromZip(files, { season, episode });
+      if (!pick) throw new Error("the download didn't contain a subtitle file");
+      data = Buffer.from(files[pick]); name = path.basename(pick);
+    } else { data = Buffer.from(buf); name = "subtitle.srt"; }
+  } else throw new Error("unknown subtitle service");
+  let savedTo = null;
+  if (saveNextTo) {
+    try {
+      const dir = path.dirname(saveNextTo), base = path.basename(saveNextTo, path.extname(saveNextTo));
+      const ext = (path.extname(name) || ".srt").toLowerCase(), code = (lang || "").toLowerCase().replace(/[^a-z-]/g, "");
+      let target = path.join(dir, `${base}${code ? "." + code : ""}${ext}`), n = 2;
+      while (fs.existsSync(target)) target = path.join(dir, `${base}${code ? "." + code : ""} (${n++})${ext}`);
+      fs.writeFileSync(target, data); savedTo = target;
+    } catch {}
+  }
+  return { name, data: new Uint8Array(data), savedTo, osRemaining: osSession && osSession.remaining };
+});
+// Subtitle files next to the video (Movie.srt, Movie.en.srt, Subs/…), like VLC.
+ipcMain.handle("sidecar-subs", async (_e, videoPath) => {
+  try {
+    const dir = path.dirname(videoPath), base = path.basename(videoPath, path.extname(videoPath)).toLowerCase();
+    const found = [];
+    const scan = (d, any) => { for (const n of fs.readdirSync(d)) { if (!SUB_EXT.test(n) || /\.sub$/i.test(n)) continue; if (any || n.toLowerCase().startsWith(base)) found.push(path.join(d, n)); } };
+    scan(dir, false);
+    for (const sub of ["Subs", "Subtitles", "subs", "subtitles"]) { const d = path.join(dir, sub); if (fs.existsSync(d) && fs.statSync(d).isDirectory()) scan(d, true); }
+    return [...new Set(found)].slice(0, 12).filter(p => fs.statSync(p).size < 5e6).map(p => ({ name: path.basename(p), data: new Uint8Array(fs.readFileSync(p)) }));
+  } catch { return []; }
+});
+
 /* ---------- self-updating from GitHub Releases ---------- */
 const pkg = require("./package.json");
 const PORTABLE = !!process.env.PORTABLE_EXECUTABLE_DIR;

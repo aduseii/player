@@ -167,6 +167,33 @@ video::cue{font-family:var(--f-body);background:rgba(0,0,0,.6);font-size:clamp(1
 .clip-prog .pbar{flex:1;height:4px;background:var(--line);border-radius:2px;overflow:hidden}
 .clip-prog .pbar i{display:block;height:100%;background:var(--honey);transition:width .3s}
 .btn[disabled]{opacity:.45;cursor:default}
+#subSearchDlg{max-width:min(760px,calc(100vw - 32px));padding:0}
+#subSearchDlg .ss-head{padding:18px 20px 12px;border-bottom:1px solid var(--line)}
+#subSearchDlg .ss-head h3{margin:0 0 10px}
+.ss-form{display:grid;grid-template-columns:minmax(0,1fr) 84px 70px 70px minmax(110px,150px) auto;gap:8px;align-items:end}
+@media (max-width:640px){.ss-form{grid-template-columns:1fr 1fr}}
+.ss-form label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);min-width:0}
+.ss-form input,.ss-form select{background:var(--ink);border:1px solid var(--line);border-radius:9px;padding:8px 10px;color:var(--fg);min-width:0;width:100%}
+.ss-form input:focus,.ss-form select:focus{border-color:var(--honey);outline:0}
+.ss-status{padding:10px 20px;font-size:13px;color:var(--muted);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.ss-list{max-height:min(52vh,460px);overflow:auto;padding:0 12px 12px}
+.ss-row{display:flex;gap:12px;align-items:center;padding:10px 8px;border-radius:10px;min-width:0}
+.ss-row:hover{background:var(--panel-2)}
+.ss-row .main{flex:1;min-width:0}
+.ss-row .rel{font-weight:600;font-size:14px;overflow-wrap:anywhere}
+.ss-row .meta{font-size:12px;color:var(--muted);margin-top:2px}
+.ss-tag{display:inline-block;font:600 10.5px var(--f-mono);letter-spacing:.04em;text-transform:uppercase;padding:2px 6px;border-radius:99px;margin-right:6px;vertical-align:1px;border:1px solid var(--line);color:var(--muted)}
+.ss-tag.exact{color:var(--ok);border-color:color-mix(in oklab,var(--ok) 50%,transparent)}
+.ss-tag.os{color:#9ec5ff}.ss-tag.sd{color:#ffb38a}
+.ss-foot{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:12px 20px;border-top:1px solid var(--line);flex-wrap:wrap;font-size:12.5px;color:var(--muted)}
+.ss-setup{padding:16px 20px;font-size:14px;line-height:1.55}
+.ss-setup ol{margin:8px 0 0;padding-left:20px}
+.ss-setup a{color:var(--honey)}
+.acct{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 14px;margin-top:12px}
+.acct label{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)}
+.acct input{background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:8px 10px;color:var(--fg)}
+.acct input:focus{border-color:var(--honey);outline:0}
+.set a{color:var(--honey)}
 .drop-hint{position:absolute;inset:10px;border:2px dashed var(--honey);border-radius:12px;display:grid;place-items:center;background:#0c0b14e6;font:700 22px var(--f-display);z-index:6}
 
 .spinner{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px;border-radius:50%;border:3px solid #ffffff22;border-top-color:var(--honey);animation:spin .8s linear infinite;z-index:3}
@@ -502,6 +529,21 @@ dialog h3{font:700 22px var(--f-display);margin:0 0 12px}
         </div>
         <div style="margin-top:12px"><button class="btn sm ghost" id="ssReset">Reset to Netflix style</button></div>
       </div>
+      <div class="set" id="subAcctCard" style="display:block" hidden>
+        <div class="d"><strong>Subtitle search</strong><span>Crave searches OpenSubtitles.com and SubDL. Both are free; add a key for at least one. Keys and passwords stay on this computer.</span></div>
+        <div class="acct">
+          <label>SubDL API key<input id="acSubdl" type="password" spellcheck="false" placeholder="From subdl.com → Panel → API"></label>
+          <label>OpenSubtitles API key<input id="acOsKey" type="password" spellcheck="false" placeholder="From opensubtitles.com/consumers"></label>
+          <label>OpenSubtitles username (optional)<input id="acOsUser" spellcheck="false" autocomplete="off"></label>
+          <label>OpenSubtitles password (optional)<input id="acOsPass" type="password" autocomplete="new-password"></label>
+        </div>
+        <p class="note" style="padding:8px 0 0">Get a free <a href="https://subdl.com/panel/api" target="_blank" rel="noopener">SubDL key</a> (sign in, then API) or a free <a href="https://www.opensubtitles.com/en/consumers" target="_blank" rel="noopener">OpenSubtitles key</a> (sign in, then New consumer). OpenSubtitles allows 5 downloads a day, or 20 with your username and password.</p>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center"><button class="btn sm primary" id="acSave">Save accounts</button><span id="acState" style="font-size:13px;color:var(--muted)"></span></div>
+      </div>
+      <div class="set" id="sidecarRow" hidden><div class="d"><strong>Load subtitle files next to the video</strong><span>Files like Movie.srt or Movie.en.srt, or a Subs folder, load automatically.</span></div>
+        <label class="switch"><input type="checkbox" id="setSidecar"><i></i></label></div>
+      <div class="set" id="saveSubsRow" hidden><div class="d"><strong>Save downloaded subtitles next to the video</strong><span>Keeps a copy (Movie.en.srt) so it loads next time, here and in other players.</span></div>
+        <label class="switch"><input type="checkbox" id="setSaveSubs"><i></i></label></div>
       <div class="set"><div class="d"><strong>Subtitles in screenshots</strong><span>Draw the subtitle on screen into saved screenshots.</span></div>
         <label class="switch"><input type="checkbox" id="setShotSubs"><i></i></label></div>
       <div class="set"><div class="d"><strong>Subtitle font</strong><span id="subFontText">Checking for Netflix Sans…</span></div>
@@ -518,6 +560,21 @@ dialog h3{font:700 22px var(--f-display);margin:0 0 12px}
   </section>
 </main>
 
+<dialog id="subSearchDlg">
+  <div class="ss-head">
+    <h3>Find subtitles</h3>
+    <form class="ss-form" id="ssForm" autocomplete="off">
+      <label>Title<input id="ssTitle" spellcheck="false" required></label>
+      <label>Year<input id="ssYear" inputmode="numeric" maxlength="4"></label>
+      <label>Season<input id="ssSeason" inputmode="numeric" maxlength="2"></label>
+      <label>Episode<input id="ssEpisode" inputmode="numeric" maxlength="3"></label>
+      <label>Language<select id="ssLang"></select></label>
+      <button class="btn primary" type="submit" id="ssGo">Search</button>
+    </form>
+  </div>
+  <div id="ssBody"></div>
+  <div class="ss-foot"><span id="ssQuota"></span><span style="display:flex;gap:8px"><button class="btn sm ghost" id="ssAccounts">Accounts…</button><button class="btn sm" id="ssClose">Close</button></span></div>
+</dialog>
 <dialog id="helpDlg">
   <h3>Keyboard shortcuts</h3>
   <div class="keys">
@@ -591,7 +648,7 @@ const store = {
   get(k, d){ try { const x = localStorage.getItem("crave:" + k); return x == null ? d : JSON.parse(x); } catch { return d; } },
   set(k, val){ try { localStorage.setItem("crave:" + k, JSON.stringify(val)); } catch {} }
 };
-const DEF = { shotSubs:true, subStyle:{ color:"#ffffff", edge:"shadow", bg:"none", bgColor:"#000000", bgOpacity:60 }, hdr:"off", subSize:"medium", autoSubs:true, skip:10, speed:1, fmt:"image/png", autoDl:false, resume:true, autoNext:true, stats:true, volume:1, muted:false };
+const DEF = { sidecarSubs:true, saveSubs:true, subLang:"en", shotSubs:true, subStyle:{ color:"#ffffff", edge:"shadow", bg:"none", bgColor:"#000000", bgOpacity:60 }, hdr:"off", subSize:"medium", autoSubs:true, skip:10, speed:1, fmt:"image/png", autoDl:false, resume:true, autoNext:true, stats:true, volume:1, muted:false };
 const S = Object.assign({}, DEF, store.get("settings", {}));
 const saveSettings = () => store.set("settings", S);
 let library = store.get("library", []);           // [{id,url,name,kind,pos,dur,updated,marks:[{t,label}]}]
@@ -1230,7 +1287,7 @@ function bindSettings(){
   const sel = (id, key, num) => { const el = $(id); el.value = String(S[key]); el.onchange = () => { S[key] = num ? +el.value : el.value; saveSettings(); renderSkipLabels(); }; };
   const sw = (id, key, after) => { const el = $(id); el.checked = !!S[key]; el.onchange = () => { S[key] = el.checked; saveSettings(); after && after(); }; };
   sel("#setSkip", "skip", true); sel("#setSpeed", "speed", true); sel("#setFmt", "fmt");
-  sw("#setAutoDl", "autoDl"); sw("#setShotSubs", "shotSubs"); sw("#setResume", "resume"); sw("#setAutoSubs", "autoSubs"); sw("#setAutoNext", "autoNext"); sw("#setStats", "stats", () => { if (cur && cur.torrent) renderStats(); });
+  sw("#setAutoDl", "autoDl"); sw("#setShotSubs", "shotSubs"); sw("#setSidecar", "sidecarSubs"); sw("#setSaveSubs", "saveSubs"); sw("#setResume", "resume"); sw("#setAutoSubs", "autoSubs"); sw("#setAutoNext", "autoNext"); sw("#setStats", "stats", () => { if (cur && cur.torrent) renderStats(); });
 }
 
 /* ---------------- input: link bar, files, drop, paste ---------------- */
@@ -1733,15 +1790,19 @@ function shiftSub(d){
   renderCues(); pgsKick();
   osd("Subtitle delay " + fmtOff(e.offset)); renderMenuIfOpen();
 }
-async function addSubFile(f){
-  if (!cur) { toast("Open a video first, then add subtitles.", true); return; }
+async function addSubFile(f, opt = {}){
+  if (!cur) { toast("Open a video first, then add subtitles.", true); return null; }
   const me = cur, txt = await readSubText(f);
-  if (cur !== me) return;
+  if (cur !== me) return null;
   const cues = /\.(ass|ssa)$/i.test(f.name) || /^\s*\[Script Info\]/i.test(txt) ? parseAss(txt) : parseSrtVtt(txt);
-  if (!cues.length) { toast("No subtitle lines found in " + f.name + ".", true); return; }
-  const e = makeSubEntry({ label: f.name.replace(/\.[^.]+$/, ""), lang: "", codec: (f.name.split(".").pop() || "").toUpperCase(), source: "file", kind: "text" });
+  if (!cues.length) { if (!opt.quiet) toast("No subtitle lines found in " + f.name + ".", true); return null; }
+  const guessLang = opt.lang || ((f.name.match(/[._ -]([a-z]{2,3}(?:-[a-z]{2})?)(?:[._ -](?:forced|sdh|hi|cc))?\.[a-z0-9]+$/i) || [])[1] || "");
+  const e = makeSubEntry({ label: opt.label || f.name.replace(/\.[^.]+$/, ""), lang: langName(guessLang) ? guessLang : "", codec: (f.name.split(".").pop() || "").toUpperCase(), source: opt.source || "file", kind: "text" });
   cues.forEach(c => pushCue(e, c.s, c.e, c.text, c.top)); e.lastOpen = null; e.status = "ready";
-  selectSub(subs.indexOf(e)); toast(`Subtitles on: ${f.name} (${cues.length} lines)`); renderRailIfInfo();
+  if (opt.select !== false) selectSub(subs.indexOf(e));
+  if (!opt.quiet) toast(`Subtitles on: ${opt.label || f.name} (${cues.length} lines)`);
+  renderMenuIfOpen(); renderRailIfInfo();
+  return e;
 }
 function pickSub(list){
   const ul = (navigator.language || "en").slice(0, 2).toLowerCase(), en = e => langCode(e.lang) === "en";
@@ -2442,7 +2503,19 @@ async function inspectNative(){
     if (kind !== "image") list.push(e);
   });
   if (R.subs.length) toast(`Found ${R.subs.length} built-in subtitle track${R.subs.length > 1 ? "s" : ""}`);
-  if (list.length && S.autoSubs && activeSub < 0) selectSub(subs.indexOf(pickSub(list)));
+  let side = [];
+  if (S.sidecarSubs && N.sidecarSubs && cur.kind === "file" && pathOf(cur.file)) {
+    try {
+      const found = await N.sidecarSubs(pathOf(cur.file));
+      if (cur !== me) return;
+      for (const f of found) { const e = await addSubFile(new File([f.data], f.name), { select: false, quiet: true, source: "sidecar" }); if (e) side.push(e); }
+      if (side.length) toast(`Loaded ${side.length} subtitle file${side.length > 1 ? "s" : ""} from the video's folder`);
+    } catch (err) { console.warn("Crave: couldn't load subtitle files next to the video", err); }
+  }
+  if (S.autoSubs && activeSub < 0) {
+    if (side.length) selectSub(subs.indexOf(pickSub(side)));
+    else if (list.length) selectSub(subs.indexOf(pickSub(list)));
+  }
   if (P.duration) $("#hud").hidden = false;
   hdrApply(); renderMenuIfOpen(); renderRailIfInfo();
 }
@@ -2773,6 +2846,122 @@ async function renderClips(){
 }
 if ($("#openClipsBtn")) $("#openClipsBtn").onclick = () => N && N.openClipsFolder();
 
+/* ================= online subtitle search ================= */
+const SS_LANGS = [["en","English"],["es","Spanish"],["fr","French"],["de","German"],["it","Italian"],["pt-pt","Portuguese"],["pt-br","Portuguese (Brazil)"],["nl","Dutch"],["sv","Swedish"],["no","Norwegian"],["da","Danish"],["fi","Finnish"],["pl","Polish"],["cs","Czech"],["ro","Romanian"],["hu","Hungarian"],["el","Greek"],["tr","Turkish"],["ru","Russian"],["uk","Ukrainian"],["ar","Arabic"],["he","Hebrew"],["fa","Persian"],["hi","Hindi"],["id","Indonesian"],["ms","Malay"],["vi","Vietnamese"],["th","Thai"],["zh-cn","Chinese (Simplified)"],["zh-tw","Chinese (Traditional)"],["ja","Japanese"],["ko","Korean"],["sw","Swahili"]];
+$("#ssLang").innerHTML = SS_LANGS.map(([c, n]) => `<option value="${c}">${n}</option>`).join("");
+// "The.Office.US.S02E05.720p.WEB-DL.mkv" → { title: "The Office US", season: 2, episode: 5 }
+function guessFromName(name){
+  let n = String(name || "").replace(/\.[a-z0-9]{2,4}$/i, "").replace(/[._]+/g, " ").replace(/\s+/g, " ").trim();
+  const out = { title: "", year: "", season: "", episode: "" };
+  n = n.replace(/^(\s*\[[^\]]*\]\s*)+/, "");                    // leading release-group tags
+  const ae = n.match(/\s-\s(\d{1,4})(?:v\d)?\b/);                    // anime style "Title - 12"
+  if (ae && !/\bS\d{1,2}E\d/i.test(n)) { out.season = 1; out.episode = +ae[1]; n = n.slice(0, ae.index); }
+  const se = n.match(/\bS(\d{1,2})[ .-]?E(\d{1,3})\b/i) || n.match(/\b(\d{1,2})x(\d{2,3})\b/i) || n.match(/\bSeason (\d{1,2}) ?Episode (\d{1,3})\b/i);
+  if (se) { out.season = +se[1]; out.episode = +se[2]; n = n.slice(0, se.index); }
+  const y = n.match(/[\[(]?\b(19[2-9]\d|20[0-4]\d)\b[\])]?/);
+  if (y && y.index > 0) { out.year = y[1]; n = n.slice(0, y.index); }
+  n = n.replace(/\b(2160p|1080p|1080i|720p|576p|480p|4k|uhd|hdr10?|dv|dolby vision|blu ?ray|brrip|bdrip|bdremux|remux|web ?dl|web ?rip|web|hdrip|dvdrip|dvd|hdtv|pdtv|x264|x265|h ?264|h ?265|hevc|avc|10bit|aac\d?|ac3|eac3|ddp?5 1|dts|atmos|truehd|proper|repack|extended|unrated|directors cut|imax|multi|subbed|dubbed)\b.*$/i, "");
+  n = n.replace(/[\[(].*$/, "").replace(/\s+-\s*$/, "").replace(/^\s*\[[^\]]*\]\s*/, "").trim();
+  out.title = n;
+  return out;
+}
+let ssLast = null, ssBusy = false;
+async function openSubSearch(){
+  if (!cur) { toast("Open a video first, then search for its subtitles.", true); return; }
+  if (!N || !N.subsSearch) { toast("Subtitle search works in the Crave desktop app.", true); return; }
+  const g = guessFromName((cur.kind === "torrent" && cur.tfile && cur.tfile.name) || cur.name);
+  $("#ssTitle").value = g.title; $("#ssYear").value = g.year; $("#ssSeason").value = g.season; $("#ssEpisode").value = g.episode;
+  $("#ssLang").value = S.subLang || "en";
+  $("#ssBody").innerHTML = ""; $("#ssQuota").textContent = "";
+  if (!v.paused) v.pause();
+  $("#subSearchDlg").showModal();
+  const c = await N.subsCredsGet();
+  if (!c.subdl && !c.osKey) { renderSsSetup(); return; }
+  if (g.title) ssSearch();
+  else $("#ssTitle").focus();
+}
+function renderSsSetup(){
+  $("#ssBody").innerHTML = `<div class="ss-setup"><strong>One-time setup.</strong> Crave searches two free subtitle sites. Each needs a free key from your own account:
+    <ol><li><a href="https://subdl.com/panel/api" target="_blank" rel="noopener">SubDL</a>: sign up, open <em>Panel → API</em>, copy the key. Generous daily limits.</li>
+    <li><a href="https://www.opensubtitles.com/en/consumers" target="_blank" rel="noopener">OpenSubtitles.com</a>: sign up, open <em>API consumers → New consumer</em>, copy the key. 5 downloads a day, or 20 when you also add your username and password.</li></ol>
+    <p style="margin:10px 0 0">Paste them in <strong>Settings → Subtitle search</strong>. One is enough; both give more results.</p>
+    <div style="margin-top:12px"><button class="btn sm primary" id="ssToSettings">Open Settings</button></div></div>`;
+  $("#ssToSettings").onclick = goToAccounts;
+}
+function goToAccounts(){ $("#subSearchDlg").close(); switchView("settings"); $("#subAcctCard").scrollIntoView({ behavior: "smooth", block: "start" }); setTimeout(() => $("#acSubdl").focus(), 400); }
+$("#ssAccounts").onclick = goToAccounts;
+$("#ssClose").onclick = () => $("#subSearchDlg").close();
+$("#ssForm").onsubmit = e => { e.preventDefault(); ssSearch(); };
+$("#subSearchDlg").addEventListener("keydown", e => e.stopPropagation());
+async function ssSearch(){
+  if (ssBusy) return;
+  const q = { query: $("#ssTitle").value.trim(), year: $("#ssYear").value.trim(), season: +$("#ssSeason").value || "", episode: +$("#ssEpisode").value || "", lang: $("#ssLang").value };
+  if (!q.query) { $("#ssTitle").focus(); return; }
+  S.subLang = q.lang; saveSettings();
+  const local = cur.kind === "file" && pathOf(cur.file);
+  if (local) q.path = local;
+  if (cur.kind === "file" && cur.file) q.fileName = cur.file.name;
+  ssBusy = true; $("#ssGo").disabled = true;
+  $("#ssBody").innerHTML = `<div class="ss-status"><span class="spinner" style="position:static;margin:0;width:18px;height:18px;border-width:2px"></span>Searching${local ? ", and matching this exact file" : ""}…</div>`;
+  let r;
+  try { r = await N.subsSearch(q); }
+  catch (err) { r = { results: [], errors: [String(err && err.message || err).replace(/^Error invoking remote method '[^']+': (Error: )?/, "")] }; }
+  finally { ssBusy = false; $("#ssGo").disabled = false; }
+  if (r.needsSetup) { renderSsSetup(); return; }
+  ssLast = { q, results: r.results };
+  renderSsResults(r);
+}
+function renderSsResults(r){
+  const { results, errors } = r;
+  const langLabel = c => (SS_LANGS.find(l => l[0] === c) || [0, langName(c) || c.toUpperCase()])[1];
+  let h = `<div class="ss-status">${results.length ? `${results.length} result${results.length > 1 ? "s" : ""}` : "No subtitles found. Try a shorter title, or check the year and episode."}${r.hashed && results.some(x => x.exact) ? ` · <span style="color:var(--ok)">${results.filter(x => x.exact).length} made for this exact file</span>` : ""}${errors && errors.length ? ` · <span style="color:var(--warn)">${esc(errors.join(" · "))}</span>` : ""}</div>`;
+  h += `<div class="ss-list">` + results.map((x, i) => {
+    const meta = [langLabel(x.lang), x.season ? `S${String(x.season).padStart(2, "0")}${x.episode ? "E" + String(x.episode).padStart(2, "0") : ""}` : (x.year ? String(x.year) : ""), x.downloads ? `${x.downloads.toLocaleString()} downloads` : "", x.uploader ? "by " + x.uploader : ""].filter(Boolean).join(" · ");
+    return `<div class="ss-row"><div class="main"><div class="rel">${x.exact ? `<span class="ss-tag exact">Exact match</span>` : ""}<span class="ss-tag ${x.provider === "subdl" ? "sd" : "os"}">${x.provider === "subdl" ? "SubDL" : "OpenSubtitles"}</span>${x.hi ? `<span class="ss-tag">HI</span>` : ""}${x.ai ? `<span class="ss-tag">Machine-translated</span>` : ""}${x.fullSeason ? `<span class="ss-tag">Full season</span>` : ""}${esc(x.release || x.title || "Untitled")}</div><div class="meta">${esc(meta)}</div></div><button class="btn sm" data-get="${i}">Use</button></div>`;
+  }).join("") + `</div>`;
+  $("#ssBody").innerHTML = h;
+  $("#ssBody").querySelectorAll("[data-get]").forEach(b => b.onclick = () => ssDownload(+b.dataset.get, b));
+  if (r.osRemaining != null) $("#ssQuota").textContent = `OpenSubtitles downloads left today: ${r.osRemaining}`;
+}
+async function ssDownload(i, btn){
+  const x = ssLast && ssLast.results[i]; if (!x || !cur) return;
+  const me = cur, q = ssLast.q;
+  btn.disabled = true; btn.textContent = "Getting…";
+  try {
+    const local = cur.kind === "file" && pathOf(cur.file);
+    const r = await N.subsDownload({ provider: x.provider, id: x.id, lang: x.lang || q.lang, season: x.season || q.season, episode: x.episode || q.episode, saveNextTo: S.saveSubs && local ? local : null });
+    if (cur !== me) return;
+    const label = `${langName(x.lang || q.lang) || "Downloaded"} · ${x.provider === "subdl" ? "SubDL" : "OpenSubtitles"}`;
+    const e = await addSubFile(new File([r.data], r.name), { label, lang: x.lang || q.lang, source: "online", quiet: true });
+    if (!e) throw new Error("the file had no subtitle lines in it");
+    btn.textContent = "Loaded ✓";
+    if (r.osRemaining != null) $("#ssQuota").textContent = `OpenSubtitles downloads left today: ${r.osRemaining}`;
+    toast(`Subtitles on: ${label}${r.savedTo ? " · saved next to the video" : ""}`);
+    setTimeout(() => { if ($("#subSearchDlg").open) $("#subSearchDlg").close(); }, 700);
+  } catch (err) {
+    btn.disabled = false; btn.textContent = "Use";
+    toast("Couldn't get that subtitle: " + String(err && err.message || err).replace(/^Error invoking remote method '[^']+': (Error: )?/, ""), true);
+  }
+}
+// Settings → Subtitle search accounts
+if (N && N.subsCredsGet) {
+  $("#subAcctCard").hidden = false; $("#sidecarRow").hidden = false; $("#saveSubsRow").hidden = false;
+  const fill = async () => {
+    const c = await N.subsCredsGet();
+    $("#acSubdl").value = c.subdl; $("#acOsKey").value = c.osKey; $("#acOsUser").value = c.osUser;
+    $("#acOsPass").value = ""; $("#acOsPass").placeholder = c.hasPass ? "Saved (type to change)" : "";
+    const parts = [c.subdl ? "SubDL ready" : "", c.osKey ? (c.osUser && c.hasPass ? "OpenSubtitles ready, signed in" : "OpenSubtitles ready") : ""].filter(Boolean);
+    $("#acState").textContent = parts.length ? parts.join(" · ") : "No accounts added yet";
+  };
+  $("#acSave").onclick = async () => {
+    const patch = { subdl: $("#acSubdl").value, osKey: $("#acOsKey").value, osUser: $("#acOsUser").value };
+    if ($("#acOsPass").value) patch.osPass = $("#acOsPass").value;
+    if (!$("#acOsUser").value) patch.osPass = "";
+    await N.subsCredsSet(patch); await fill(); toast("Subtitle accounts saved");
+  };
+  fill();
+}
+
 /* ================= stage menus (subtitles / audio) ================= */
 let menuKind = null;
 function openMenu(k){ if (menuKind === k) { closeMenu(); return; } if (clip.on && !clip.busy) exitClip(); menuKind = k; renderMenu(); $("#menu").hidden = false; poke(); }
@@ -2791,11 +2980,12 @@ function renderMenu(){
       h += `<button class="mi" data-sub="${i}" ${usable(s) ? "" : "disabled"}>${ck(i === activeSub)}<span><span class="a">${esc(s.label)}</span><span class="b">${esc(st)}</span></span></button>`;
     });
     if (!subs.length) h += `<p class="note">${cur && cur.probing ? "Checking this file for built-in subtitles…" : cur && cur.kind === "file" ? "This file has no built-in subtitles." : "Built-in subtitles are read from files on your computer. For links, load a subtitle file."}</p>`;
-    h += `<div class="sep"></div><button class="mi" data-act="style">${ck(false)}<span><span class="a">Subtitle style…</span><span class="b">Colour, background, opacity, size</span></span></button><button class="mi" data-act="load">${ck(false)}<span><span class="a">Load subtitle file…</span><span class="b">.srt, .vtt, .ass or .ssa</span></span></button>`;
+    h += `<div class="sep"></div>${N && N.subsSearch ? `<button class="mi" data-act="search">${ck(false)}<span><span class="a">Search online…</span><span class="b">OpenSubtitles.com and SubDL</span></span></button>` : ""}<button class="mi" data-act="style">${ck(false)}<span><span class="a">Subtitle style…</span><span class="b">Colour, background, opacity, size</span></span></button><button class="mi" data-act="load">${ck(false)}<span><span class="a">Load subtitle file…</span><span class="b">.srt, .vtt, .ass or .ssa</span></span></button>`;
     if (activeSub >= 0) h += `<div class="delay"><span style="flex:1">Timing <span class="mono" style="color:var(--honey)">${fmtOff(subs[activeSub].offset)}</span></span><button class="btn sm" data-d="-0.5">Earlier</button><button class="btn sm" data-d="0.5">Later</button></div><p class="note" style="padding-top:0">G and H nudge by 0.1 s.</p>`;
     m.innerHTML = h;
     m.querySelectorAll("[data-sub]").forEach(b => b.onclick = () => selectSub(+b.dataset.sub));
     m.querySelector('[data-act="load"]').onclick = () => { closeMenu(); $("#subInput").click(); };
+    const sb = m.querySelector('[data-act="search"]'); if (sb) sb.onclick = () => { closeMenu(); openSubSearch(); };
     m.querySelector('[data-act="style"]').onclick = () => { closeMenu(); if (!v.paused) v.pause(); switchView("settings"); $("#subStyleCard").scrollIntoView({ behavior: "smooth", block: "start" }); };
     m.querySelectorAll("[data-d]").forEach(b => b.onclick = () => shiftSub(+b.dataset.d));
   } else if (menuKind === "hdr") {
@@ -2839,9 +3029,9 @@ if (N) {
   N.onSaved(p => toast("Saved to " + p));
   const row = document.createElement("div"); row.className = "set";
   row.innerHTML = `<div class="d"><strong>Screenshots folder</strong><span>Downloaded shots are saved to Pictures\\Crave.</span></div><button class="btn sm" id="openShotsDir">Open folder</button>`;
-  document.querySelector(".settings").insertBefore(row, document.querySelector(".settings .note"));
+  document.querySelector(".settings").insertBefore(row, document.querySelector(".settings > .note"));
   $("#openShotsDir").onclick = () => N.openShotsFolder();
-  document.querySelector(".settings .note").textContent = "Torrents connect to the full BitTorrent network, and audio conversion uses the ffmpeg built into this app, so a whole movie's soundtrack usually converts in under a minute. Torrent downloads are temporary and are cleared when Crave closes.";
+  document.querySelector(".settings > .note").textContent = "Torrents connect to the full BitTorrent network, and audio conversion uses the ffmpeg built into this app, so a whole movie's soundtrack usually converts in under a minute. Torrent downloads are temporary and are cleared when Crave closes.";
   $("#fileInput").setAttribute("accept", "video/*,audio/*,.mkv,.mov,.m4v,.ts,.avi,.wmv,.flv,.torrent,.srt,.vtt,.ass,.ssa");
 }
 
@@ -2849,7 +3039,7 @@ if (N) {
 if (N && N.onUpdate) {
   const row = document.createElement("div"); row.className = "set";
   row.innerHTML = `<div class="d"><strong>Updates</strong><span id="updText">Checking…</span></div><button class="btn sm" id="updBtn">Check for updates</button>`;
-  document.querySelector(".settings").insertBefore(row, document.querySelector(".settings .set"));
+  document.querySelector(".settings").insertBefore(row, document.querySelector(".settings > .set"));
   let dismissed = null;
   const restart = () => { saveProgress(); N.installUpdate(); };
   const renderUpd = s => {

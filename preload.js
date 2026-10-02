@@ -45,5 +45,10 @@ contextBridge.exposeInMainWorld("craveNative", {
   showItem: p => ipcRenderer.invoke("show-item", p),
   openItem: p => ipcRenderer.invoke("open-item", p),
   openClipsFolder: () => ipcRenderer.invoke("open-clips-folder"),
-  itemsExist: list => ipcRenderer.invoke("items-exist", list)
+  itemsExist: list => ipcRenderer.invoke("items-exist", list),
+  subsCredsGet: () => ipcRenderer.invoke("subs-creds-get"),
+  subsCredsSet: patch => ipcRenderer.invoke("subs-creds-set", patch),
+  subsSearch: q => ipcRenderer.invoke("subs-search", q),
+  subsDownload: o => ipcRenderer.invoke("subs-download", o),
+  sidecarSubs: p => ipcRenderer.invoke("sidecar-subs", p)
 });
