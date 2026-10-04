@@ -753,6 +753,34 @@ html[data-theme="light"] .stage.bar-below:not(.is-empty) .seek .rail{background:
 html[data-theme="light"] .stage.bar-below:not(.is-empty) .seek .buf{background:rgba(20,22,43,.12)}
 html[data-theme="light"] .stage.bar-below:not(.is-empty) .seek .knob{background:#fff;box-shadow:0 0 0 1px rgba(20,22,43,.15),0 0 0 4px rgba(255,192,77,.35)}
 html[data-theme="light"] .stage.bar-below:not(.is-empty) #hdrBtn .lbl{background:#14162b;color:#fff}
+/* ---------- player mode (opens like VLC: just the player) ---------- */
+.po-only{display:none}
+body.po .po-only{display:block}
+body.po .full-only{display:none!important}
+body.po .top,body.po .upbar,body.po .nowbar,body.po .ambient{display:none!important}
+body.po main{padding:0!important;max-width:none!important}
+body.po{overflow:hidden;background:#000}
+html[data-theme="light"] body.po{background:#eef1f8}
+body.po .stage{border-radius:0;box-shadow:none;height:100vh;height:100dvh;aspect-ratio:auto}
+body.po .stage:not(.is-empty){height:100vh;height:100dvh}
+body.po .stage.is-empty{background:#07080d}
+html[data-theme="light"] body.po .stage.is-empty{background:#eef1f8;box-shadow:none}
+body.po .stage.is-empty .hud,body.po .stage.is-empty .hud[hidden]{display:block!important;position:absolute;inset:auto 0 0;opacity:1;pointer-events:auto;background:rgba(14,16,30,.94);backdrop-filter:blur(30px) saturate(1.5);padding:14px 22px 12px;border-top:.5px solid rgba(255,255,255,.08);z-index:3}
+html[data-theme="light"] body.po .stage.is-empty .hud{background:rgba(255,255,255,.9);border-top-color:rgba(20,22,43,.08)}
+html[data-theme="light"] body.po .stage.is-empty .hud .cb,html[data-theme="light"] body.po .stage.is-empty .hud .time,html[data-theme="light"] body.po .stage.is-empty .speed-sel{color:#14162b}
+html[data-theme="light"] body.po .stage.is-empty .seek .rail{background:rgba(20,22,43,.14)}
+body.po .stage.is-empty .empty{bottom:104px;background:radial-gradient(60% 60% at 50% 40%,rgba(92,108,255,.16),transparent 70%)}
+html[data-theme="light"] body.po .stage.is-empty .empty{background:radial-gradient(60% 60% at 50% 40%,rgba(120,140,255,.22),transparent 70%)}
+.po-brand{font:800 34px/1 "Bricolage Grotesque",var(--f-head);letter-spacing:-.035em;margin-bottom:18px}
+.po-brand b{color:var(--honey)}
+.po-link{display:flex!important;gap:8px;width:min(520px,calc(100vw - 48px));margin:0 auto 14px}
+body:not(.po) .po-link{display:none!important}
+.po-link input{flex:1;min-width:0;height:42px;border-radius:11px;border:0;background:rgba(255,255,255,.08);color:var(--fg);padding:0 14px;font:14px var(--f-ui)}
+.po-link input:focus{outline:2px solid rgba(255,192,77,.55)}
+html[data-theme="light"] .po-link input{background:rgba(20,22,43,.07)}
+.po-drop{color:var(--muted);font-size:13px;margin:6px auto 0!important;max-width:none!important;text-align:center}
+.app-btn{position:relative}
+.app-btn[aria-pressed="true"]{color:var(--honey)}
 </style>
 </head>
 <body>
@@ -830,11 +858,14 @@ html[data-theme="light"] .stage.bar-below:not(.is-empty) #hdrBtn .lbl{background
 
           <div class="empty" id="empty">
             <div>
-              <h2>Paste a link.<br><em>Watch it.</em></h2>
-              <p>Video files, streams and torrents. Open a file, paste a link at the top, or drop a video anywhere.</p>
+              <h2 class="full-only">Paste a link.<br><em>Watch it.</em></h2>
+              <p class="full-only">Video files, streams and torrents. Open a file, paste a link at the top, or drop a video anywhere.</p>
+              <div class="po-only po-brand">Crave<b>.</b></div>
+              <form class="po-only po-link" id="poLinkForm" autocomplete="off"><input id="poUrl" type="text" spellcheck="false" placeholder="Paste a link, stream or magnet" aria-label="Video link"><button class="btn primary" type="submit">Play</button></form>
               <div class="empty-actions"><button class="btn primary" id="emptyOpen"><svg class="i"><use href="#i-folder"/></svg>Open file</button></div>
-              <p class="samples-lbl">Or try one of these</p>
-              <div class="samples" id="samples"></div>
+              <p class="samples-lbl full-only">Or try one of these</p>
+              <div class="samples full-only" id="samples"></div>
+              <p class="po-only po-drop">or drop a video anywhere</p>
             </div>
           </div>
 
@@ -865,6 +896,7 @@ html[data-theme="light"] .stage.bar-below:not(.is-empty) #hdrBtn .lbl{background
               <button class="time end" id="timeEnd" title="Switch between length and time left">0:00</button>
             </div>
             <div class="ctrls">
+              <button class="cb app-btn" id="appBtn" title="Library, Shots, Settings and more" aria-label="Show library, shots and settings"><svg class="i" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.6"/></svg></button>
               <button class="cb big" id="playBtn" title="Play (Space)"><svg class="i"><use href="#i-play"/></svg></button>
               <button class="cb num" id="backBtn" title="Back (J)"><svg class="i"><use href="#i-back"/></svg><span class="lbl" id="backLbl">10</span></button>
               <button class="cb num" id="fwdBtn" title="Forward (L)"><svg class="i"><use href="#i-fwd"/></svg><span class="lbl" id="fwdLbl">10</span></button>
@@ -1433,7 +1465,7 @@ function renderBuffered(){
 }
 
 /* ---------------- controls ---------------- */
-const togglePlay = () => { if (!cur) return; if (v.paused) v.play().catch(() => {}); else v.pause(); osd(v.paused ? "Paused" : "▶"); };
+const togglePlay = () => { if (!cur) { $("#fileInput").click(); return; } if (v.paused) v.play().catch(() => {}); else v.pause(); osd(v.paused ? "Paused" : "▶"); };
 function skip(sec){ if (!cur || !isFinite(v.duration)) return; v.currentTime = Math.max(0, Math.min(v.duration - .1, v.currentTime + sec)); osd((sec > 0 ? "+" : "−") + Math.abs(sec) + "s"); }
 function setSpeed(r){ r = Math.max(.25, Math.min(4, Math.round(r * 100) / 100)); v.playbackRate = r; osd(r + "×"); }
 function setVolume(x){ vol.muted = false; vol.level = Math.round(Math.max(0, Math.min(1, x)) * 100) / 100; applyVol(); hideBanner("muted"); osd("Volume " + Math.round(vol.level * 100) + "%"); }
@@ -1445,6 +1477,7 @@ $("#nextBtn").onclick = playNext;
 $("#muteBtn").onclick = () => { vol.muted = !vol.muted; applyVol(); if (!vol.muted) hideBanner("muted"); };
 $("#volRange").oninput = e => { vol.muted = false; vol.level = +e.target.value; applyVol(); hideBanner("muted"); };
 $("#speedSel").onchange = e => { v.playbackRate = +e.target.value; };
+$("#speedSel").value = String(S.speed || 1);
 $("#markBtn").onclick = addMark;
 $("#clipBtn").onclick = () => clip.on ? exitClip() : enterClip();
 $("#hdrBtn").onclick = () => openMenu("hdr");
@@ -1459,9 +1492,21 @@ $("#nowShot").onclick = () => $("#shotBtn").click();
 $("#nowClip").onclick = () => $("#clipBtn").click();
 $("#nowFind").onclick = () => openSubSearch();
 // The picture gets the window height minus the info row under it, so the title is always in view.
-function fitStage(){ const nb = $("#nowbar"); document.documentElement.style.setProperty("--info-h", (nb.hidden ? 0 : nb.offsetHeight + 14) + "px"); }
+function fitStage(){ const nb = $("#nowbar"); document.documentElement.style.setProperty("--info-h", (nb.hidden || !nb.offsetHeight ? 0 : nb.offsetHeight + 14) + "px"); }
+/* Player mode: Crave opens as just a player, like VLC. The grid button on the bar brings back the full app. */
+function setPlayerMode(on){
+  document.body.classList.toggle("po", on);
+  $("#appBtn").setAttribute("aria-pressed", String(!on));
+  $("#appBtn").title = on ? "Library, Shots, Settings and more" : "Back to just the player";
+  if (on && $("#view-board").hidden) switchView("board");
+  requestAnimationFrame(() => { try { fitChrome(); fitStage(); applyCtrlLayout(); sizeSubs(); renderWm(); ambient(); } catch {} });
+}
+$("#appBtn").onclick = () => setPlayerMode(!document.body.classList.contains("po"));
+$("#poLinkForm").onsubmit = e => { e.preventDefault(); const val = $("#poUrl").value.trim(); if (!val) { $("#poUrl").focus(); return; } urlInput.value = val; $("#linkForm").requestSubmit(); $("#poUrl").value = ""; };
+$("#poUrl").addEventListener("keydown", e => e.stopPropagation());
 try { new ResizeObserver(fitStage).observe($("#nowbar")); } catch {}
 setTimeout(() => applyCtrlLayout(), 0);
+setPlayerMode(true);   // always open as just the player
 v.addEventListener("loadedmetadata", () => renderNow());
 /* ambient glow: the page behind the player takes its colours from the picture */
 /* control bar below the picture (like VLC), or over it; full screen always uses the fading bar over the picture */
@@ -1815,6 +1860,7 @@ $("#clearLibBtn").onclick = e => {
 
 /* ---------------- views ---------------- */
 function switchView(name){
+  if (name !== "board" && document.body.classList.contains("po")) setPlayerMode(false);
   $$(".tab").forEach(t => t.setAttribute("aria-selected", t.dataset.view === name));
   $$(".view").forEach(s => s.hidden = s.id !== "view-" + name);
   if (name === "library") renderLibrary();
