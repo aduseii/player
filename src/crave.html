@@ -781,6 +781,12 @@ html[data-theme="light"] .po-link input{background:rgba(20,22,43,.07)}
 .po-drop{color:var(--muted);font-size:13px;margin:6px auto 0!important;max-width:none!important;text-align:center}
 .app-btn{position:relative}
 .app-btn[aria-pressed="true"]{color:var(--honey)}
+/* Up next: add files or a link */
+.q-add{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+.q-add > .btn{justify-content:center}
+.q-link{display:flex;gap:6px}
+.q-link input{flex:1;min-width:0;height:32px;border:0;border-radius:9px;background:rgba(255,255,255,.08);color:var(--fg);padding:0 10px;font:13px var(--f-ui)}
+.q-link input:focus{outline:2px solid rgba(255,192,77,.5)}
 </style>
 </head>
 <body>
@@ -834,6 +840,7 @@ html[data-theme="light"] .po-link input{background:rgba(20,22,43,.07)}
     <button class="btn icon" type="button" id="queueBtn" title="Add the link to Up next"><svg class="i"><use href="#i-plus"/></svg></button>
     <button class="btn" type="button" id="openFileBtn"><svg class="i"><use href="#i-folder"/></svg><span class="hide-sm">Open file</span></button>
     <input type="file" id="fileInput" accept="video/*,audio/*,.mkv,.mov,.m4v,.ts,.torrent,.srt,.vtt,.ass,.ssa" multiple hidden>
+    <input type="file" id="queueInput" accept="video/*,audio/*,.mkv,.mov,.m4v,.ts,.torrent" multiple hidden>
     <input type="file" id="subInput" accept=".vtt,.srt,.ass,.ssa" multiple hidden>
   </form>
   <button class="kbd-btn hide-sm" id="helpBtn" title="Keyboard shortcuts">?</button>
@@ -1736,14 +1743,20 @@ function renderRail(){
   $("#mCount").textContent = currentMarks().length || "";
   const body = $("#rbody"), foot = $("#rfoot");
   if (railTab === "queue") {
-    let html = "";
+    let html = `<div class="q-add"><button class="btn sm" id="qAddFiles"><svg class="i"><use href="#i-plus"/></svg>Add files…</button>
+      <form class="q-link" id="qLinkForm" autocomplete="off"><input id="qUrl" type="text" spellcheck="false" placeholder="Paste a link to add" aria-label="Link to add to Up next"><button class="btn sm" type="submit">Add</button></form></div>`;
     if (cur) html += `<div class="row current"><div class="main"><span class="a">${esc(cur.name)}</span><span class="b">Now playing · ${KIND_LABEL[cur.kind]}</span></div></div>`;
-    if (!queue.length) html += `<div class="blank"><strong>Nothing queued</strong>Paste a link and press Queue, or open several files at once.</div>`;
+    if (!queue.length) html += `<div class="blank"><strong>Nothing queued</strong>Add files or paste a link above, or drop videos here.</div>`;
     else html += `<div class="list">` + queue.map((q, i) => `<div class="row"><button class="main" data-i="${i}"><span class="a">${esc(q.name || nameFromUrl(q.url, q.kind))}</span><span class="b">${KIND_LABEL[q.kind]}${q.file ? " · " + fmtBytes(q.file.size) : ""}</span></button>
       ${i ? `<button class="iconbtn" data-up="${i}" title="Move up"><svg class="i"><use href="#i-up"/></svg></button>` : ""}
       <button class="iconbtn" data-rm="${i}" title="Remove"><svg class="i"><use href="#i-x"/></svg></button></div>`).join("") + `</div>`;
     body.innerHTML = html;
     body.querySelectorAll("[data-i]").forEach(b => b.onclick = () => { const [n] = queue.splice(+b.dataset.i, 1); play(n); });
+    $("#qAddFiles").onclick = () => $("#queueInput").click();
+    $("#qUrl").addEventListener("keydown", e => e.stopPropagation());
+    $("#qLinkForm").onsubmit = e => { e.preventDefault(); const val = $("#qUrl").value.trim(), d = detect(val);
+      if (!d || d.kind === "page" || d.kind === "bad") { toast("That doesn't look like a video link.", true); $("#qUrl").focus(); return; }
+      if (!cur) play(d); else enqueue(d); };
     body.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { queue.splice(+b.dataset.rm, 1); renderRail(); });
     body.querySelectorAll("[data-up]").forEach(b => b.onclick = () => { const i = +b.dataset.up; [queue[i-1], queue[i]] = [queue[i], queue[i-1]]; renderRail(); });
     foot.innerHTML = `<button class="btn sm" id="rfNext" ${queue.length ? "" : "disabled"}><svg class="i"><use href="#i-next"/></svg>Play next</button>
@@ -1889,6 +1902,16 @@ $("#linkForm").onsubmit = e => { e.preventDefault(); const d = detect(urlInput.v
 $("#queueBtn").onclick = () => { const d = detect(urlInput.value); if (!d) { urlInput.focus(); return; } if (d.kind === "page" || d.kind === "bad") return play(d); if (!cur) play(d); else enqueue(d); urlInput.value = ""; urlInput.dispatchEvent(new Event("input")); };
 $("#openFileBtn").onclick = () => $("#fileInput").click();
 $("#fileInput").onchange = e => { handleFiles([...e.target.files]); e.target.value = ""; };
+// Up next: files picked or dropped there are queued, not played (unless nothing is playing yet).
+function queueFiles(files){
+  const media = files.filter(f => !/\.(srt|vtt|ass|ssa)$/i.test(f.name));
+  if (!media.length) return;
+  const srcs = media.map(f => ({ kind: "file", file: f, name: f.name }));
+  if (!cur) play(srcs.shift());
+  srcs.forEach(s => queue.push(s)); renderRail();
+  if (srcs.length) toast(srcs.length === 1 ? "Added to Up next: " + srcs[0].name : srcs.length + " videos added to Up next");
+}
+$("#queueInput").onchange = e => { queueFiles([...e.target.files]); e.target.value = ""; };
 function handleFiles(files){
   const subs = files.filter(f => /\.(srt|vtt)$/i.test(f.name));
   const media = files.filter(f => !/\.(srt|vtt)$/i.test(f.name));
@@ -1909,9 +1932,10 @@ window.addEventListener("dragover", e => e.preventDefault());
 window.addEventListener("drop", e => {
   e.preventDefault(); dragDepth = 0; $("#dropHint").hidden = true;
   const files = [...(e.dataTransfer.files || [])];
-  if (files.length) return handleFiles(files);
+  const toQueue = e.target.closest && e.target.closest("#drawer") && railTab === "queue";
+  if (files.length) return toQueue ? queueFiles(files) : handleFiles(files);
   const txt = e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain");
-  if (txt) { const d = detect(txt.split("\n")[0]); if (d) { switchView("board"); play(d); } }
+  if (txt) { const d = detect(txt.split("\n")[0]); if (d) { if (toQueue && cur) enqueue(d); else { switchView("board"); play(d); } } }
 });
 document.addEventListener("paste", e => {
   if (e.target.closest && e.target.closest("input,textarea")) return;
