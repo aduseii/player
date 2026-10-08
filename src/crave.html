@@ -907,6 +907,8 @@ html[data-theme="light"] .po-link input{background:rgba(20,22,43,.07)}
               <button class="cb big" id="playBtn" title="Play (Space)"><svg class="i"><use href="#i-play"/></svg></button>
               <button class="cb num" id="backBtn" title="Back (J)"><svg class="i"><use href="#i-back"/></svg><span class="lbl" id="backLbl">10</span></button>
               <button class="cb num" id="fwdBtn" title="Forward (L)"><svg class="i"><use href="#i-fwd"/></svg><span class="lbl" id="fwdLbl">10</span></button>
+              <button class="cb hide-sm frame-btn" id="framePrev" title="Previous frame (,)" aria-label="Previous frame"><svg class="i" viewBox="0 0 24 24"><path d="M6 5v14"/><path d="M18 5.5 9 12l9 6.5z" fill="currentColor"/></svg></button>
+              <button class="cb hide-sm frame-btn" id="frameNext" title="Next frame (.)" aria-label="Next frame"><svg class="i" viewBox="0 0 24 24"><path d="M18 5v14"/><path d="M6 5.5 15 12l-9 6.5z" fill="currentColor"/></svg></button>
               <button class="cb hide-sm" id="nextBtn" title="Next in Up next (N)"><svg class="i"><use href="#i-next"/></svg></button>
               <div class="vol">
                 <button class="cb" id="muteBtn" title="Mute (M)"><svg class="i"><use href="#i-vol"/></svg></button>
@@ -1089,7 +1091,7 @@ html[data-theme="light"] .po-link input{background:rgba(20,22,43,.07)}
     <kbd>J</kbd><span>Back one skip interval</span>
     <kbd>L</kbd><span>Forward one skip interval</span>
     <kbd>← →</kbd><span>Back / forward 5 seconds</span>
-    <kbd>, .</kbd><span>Step one frame (while paused)</span>
+    <kbd>, .</kbd><span>Previous / next frame (pauses; hold to keep stepping)</span>
     <kbd>↑ ↓</kbd><span>Volume</span>
     <kbd>[ ]</kbd><span>Slower / faster</span>
     <kbd>0–9</kbd><span>Jump to 0%–90%</span>
@@ -1472,6 +1474,38 @@ function renderBuffered(){
 }
 
 /* ---------------- controls ---------------- */
+/* ---- frame by frame: the exact frame rate from the file, or measured from playback ---- */
+let lastFrameT = null, measuredFps = 0;
+(function watchFrames(){
+  if (!("requestVideoFrameCallback" in HTMLVideoElement.prototype)) return;
+  let prev = null;
+  const cb = (now, md) => {
+    if (prev != null && !v.paused) { const d = md.mediaTime - prev; if (d > 0.004 && d < 0.2) measuredFps = measuredFps ? measuredFps * 0.9 + (1 / d) * 0.1 : 1 / d; }
+    prev = md.mediaTime; lastFrameT = md.mediaTime; v.requestVideoFrameCallback(cb);
+  };
+  v.requestVideoFrameCallback(cb);
+  v.addEventListener("loadstart", () => { prev = null; lastFrameT = null; measuredFps = 0; });
+})();
+function frameRate(){
+  const vt = cur && cur.probe && cur.probe.video && cur.probe.video[0];
+  if (vt && vt.fps > 1 && vt.fps < 241) return vt.fps;
+  const known = [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60];
+  if (measuredFps > 5) return known.reduce((a, b) => Math.abs(b - measuredFps) < Math.abs(a - measuredFps) ? b : a);
+  return 24;
+}
+function stepFrame(dir){
+  if (!cur || !isFinite(v.duration)) return;
+  if (!v.paused) v.pause();
+  const fps = frameRate(), shown = lastFrameT != null && Math.abs(lastFrameT - v.currentTime) < 1 / fps ? lastFrameT : v.currentTime;
+  const idx = Math.round(shown * fps) + dir;
+  // aim a quarter-frame into the target frame so the decoder lands on it, not the one before
+  const t = Math.max(0, Math.min(v.duration - 0.001, (idx + 0.25) / fps));
+  v.currentTime = t; lastFrameT = idx / fps;
+  const ms = Math.round(Math.max(0, idx) / fps * 1000), tc = fmt(Math.floor(ms / 1000)) + "." + String(ms % 1000).padStart(3, "0");
+  osd((dir > 0 ? "Next frame" : "Previous frame") + " · " + tc + " · frame " + Math.max(0, idx).toLocaleString());
+}
+$("#framePrev").onclick = () => stepFrame(-1);
+$("#frameNext").onclick = () => stepFrame(1);
 const togglePlay = () => { if (!cur) { $("#fileInput").click(); return; } if (v.paused) v.play().catch(() => {}); else v.pause(); osd(v.paused ? "Paused" : "▶"); };
 function skip(sec){ if (!cur || !isFinite(v.duration)) return; v.currentTime = Math.max(0, Math.min(v.duration - .1, v.currentTime + sec)); osd((sec > 0 ? "+" : "−") + Math.abs(sec) + "s"); }
 function setSpeed(r){ r = Math.max(.25, Math.min(4, Math.round(r * 100) / 100)); v.playbackRate = r; osd(r + "×"); }
@@ -1983,8 +2017,8 @@ document.addEventListener("keydown", e => {
     case "n": playNext(); break;
     case "[": setSpeed(v.playbackRate - .25); break;
     case "]": setSpeed(v.playbackRate + .25); break;
-    case ",": if (v.paused) { v.currentTime = Math.max(0, v.currentTime - 1/30); } else hit = false; break;
-    case ".": if (v.paused) { v.currentTime += 1/30; } else hit = false; break;
+    case ",": stepFrame(-1); break;
+    case ".": stepFrame(1); break;
     default:
       if (/^[0-9]$/.test(k) && isFinite(v.duration)) v.currentTime = v.duration * (+k / 10); else hit = false;
   }
@@ -3265,7 +3299,7 @@ async function inspectNative(){
   if (!R) { renderMenuIfOpen(); if (S.autoSubs && activeSub < 0) ensureEnglishSubs(me); return; }
   const P = {
     container: "native", duration: R.duration || 0,
-    video: R.video.map(t => ({ codec: t.codec, cname: FF_V(t.codec), supported: ffVideoOK(t.codec), hdr: t.hdr || "", dvProfile: t.dvProfile || 0, w: t.w, h: t.h, tenbit: t.tenbit })),
+    video: R.video.map(t => ({ fps: t.fps || 0, codec: t.codec, cname: FF_V(t.codec), supported: ffVideoOK(t.codec), hdr: t.hdr || "", dvProfile: t.dvProfile || 0, w: t.w, h: t.h, tenbit: t.tenbit })),
     audio: R.audio.map(t => ({ codec: t.codec, cname: FF_A[t.codec] || t.codec.toUpperCase(), supported: SAFE_A.has(t.codec), lang: t.lang, name: t.title, def: t.def, channels: 0, layout: t.layout })),
     subs: []
   };

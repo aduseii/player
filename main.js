@@ -277,6 +277,7 @@ function parseProbe(text){
           const wh = l.match(/, (\d{2,5})x(\d{2,5})/);
           if (wh) { s.w = +wh[1]; s.h = +wh[2]; }
           s.tenbit = /p(10|12)(le|be)?\b/.test(l);
+          const fr = l.match(/, ([\d.]+) fps/) || l.match(/, ([\d.]+) tbr/); if (fr) s.fps = +fr[1];
           s.hdr = /smpte2084/.test(l) ? "HDR10" : /arib-std-b67/.test(l) ? "HLG" : "";
           res.video.push(s);
         }
