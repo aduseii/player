@@ -507,7 +507,8 @@ main:has(> #view-board:not([hidden])){padding-block:12px}
 .menu .delay .btn.primary,.clip-actions .btn.primary{background:#fff}
 .banner{background:var(--glass);backdrop-filter:blur(30px) saturate(1.7);border:.5px solid var(--glass-line);border-left:3px solid var(--honey);border-radius:14px}
 .banner.bad{border-left-color:var(--bad)}
-.osd{background:var(--glass);backdrop-filter:blur(24px);border-radius:16px;font:600 20px var(--f-head);letter-spacing:-.01em}
+.osd{background:rgba(22,24,40,.82);border-radius:16px;font:600 20px var(--f-head);letter-spacing:-.01em;visibility:hidden;transition:opacity .35s,visibility 0s .35s}
+.osd.show{visibility:visible;transition:none}
 .tstats{background:var(--glass);backdrop-filter:blur(20px);border-radius:12px;font:500 12px var(--f-ui);font-variant-numeric:tabular-nums;top:64px}
 .errbox{background:rgba(0,0,0,.82);backdrop-filter:blur(10px)}
 .errbox h3{font:600 20px var(--f-head);color:#fff}
@@ -1213,6 +1214,15 @@ function toast(msg, bad){
   const el = document.createElement("div"); el.className = "toast" + (bad ? " bad" : ""); el.textContent = msg;
   $("#toasts").appendChild(el); setTimeout(() => el.remove(), bad ? 5200 : 2600);
 }
+// After a seek, make the browser redraw the picture layer, in case it got stuck showing an old frame.
+let repaintT = 0;
+function repaintVideo(){
+  cancelAnimationFrame(repaintT);
+  v.style.opacity = "0.999";
+  repaintT = requestAnimationFrame(() => { repaintT = requestAnimationFrame(() => { v.style.opacity = ""; }); });
+}
+v.addEventListener("seeked", repaintVideo);
+v.addEventListener("playing", repaintVideo);
 let osdT; function osd(text){ const o = $("#osd"); o.textContent = text; o.classList.add("show"); clearTimeout(osdT); osdT = setTimeout(() => o.classList.remove("show"), 650); }
 function download(blob, name){
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;

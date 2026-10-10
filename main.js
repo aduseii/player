@@ -14,6 +14,9 @@ protocol.registerSchemesAsPrivileged([{ scheme: "app", privileges: { standard: t
 // Media players start with sound; use the GPU's HEVC decoder where Windows has one.
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 app.commandLine.appendSwitch("enable-features", "PlatformHEVCDecoderSupport");
+// Windows can hand the video to a hardware "overlay" plane that sometimes stops updating after a seek,
+// leaving a frozen picture (only frosted-glass areas kept showing the live video). Composite video normally instead.
+app.commandLine.appendSwitch("disable-direct-composition-video-overlays");
 app.setAppUserModelId("app.crave.player");
 
 let win = null;
