@@ -788,6 +788,21 @@ html[data-theme="light"] .po-link input{background:rgba(20,22,43,.07)}
 .q-link{display:flex;gap:6px}
 .q-link input{flex:1;min-width:0;height:32px;border:0;border-radius:9px;background:rgba(255,255,255,.08);color:var(--fg);padding:0 10px;font:13px var(--f-ui)}
 .q-link input:focus{outline:2px solid rgba(255,192,77,.5)}
+/* notifications: top left, out of the way of the controls */
+.toasts{left:16px!important;right:auto!important;bottom:auto!important;top:calc(16px + var(--chrome-h,0px));transform:none!important;align-items:flex-start;width:auto;max-width:min(380px,calc(100vw - 32px))}
+body.po .toasts{top:16px}
+.toast{animation:tin2 .22s ease-out;transition:opacity .25s,transform .25s;font-size:13.5px;padding:9px 14px;border-radius:12px;background:rgba(22,24,40,.88);backdrop-filter:blur(24px) saturate(1.5);border:.5px solid rgba(255,255,255,.1);box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.toast.out{opacity:0;transform:translateX(-10px)}
+@keyframes tin2{from{opacity:0;transform:translateX(-12px)}}
+.toast.ncard{display:flex;align-items:center;gap:11px;padding:8px 10px 8px 8px;min-width:240px}
+.n-img{width:64px;height:36px;object-fit:cover;border-radius:6px;flex:none;background:#000}
+.n-txt{display:flex;flex-direction:column;min-width:0;line-height:1.3}
+.n-txt strong{font-weight:600;font-size:13.5px}
+.n-txt span{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.n-act{margin-left:auto;border:0;border-radius:8px;padding:5px 11px;font:600 12.5px var(--f-ui);background:rgba(255,255,255,.12);color:var(--fg);cursor:pointer}
+.n-act:hover{background:rgba(255,255,255,.2)}
+html[data-theme="light"] .toast{background:rgba(255,255,255,.92);color:var(--fg);border-color:rgba(20,22,43,.08);box-shadow:0 10px 30px rgba(20,22,43,.15)}
+html[data-theme="light"] .n-act{background:rgba(20,22,43,.07)}
 </style>
 </head>
 <body>
@@ -1212,7 +1227,20 @@ const ago = ts => { const s = (Date.now() - ts) / 1000; if (s < 60) return "just
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function toast(msg, bad){
   const el = document.createElement("div"); el.className = "toast" + (bad ? " bad" : ""); el.textContent = msg;
-  $("#toasts").appendChild(el); setTimeout(() => el.remove(), bad ? 5200 : 2600);
+  $("#toasts").appendChild(el); setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 250); }, bad ? 5200 : 2600);
+}
+// Richer notification card (top left): optional picture, title, detail line and one action.
+let lastShotCard = null;
+function notify({ img, title, sub, action, ms = 3000 }){
+  const el = document.createElement("div"); el.className = "toast ncard";
+  el.innerHTML = (img ? `<img class="n-img" src="${img}" alt="">` : "") + `<div class="n-txt"><strong>${esc(title)}</strong>${sub ? `<span>${esc(sub)}</span>` : ""}</div>`;
+  const set = a => { const old = el.querySelector(".n-act"); if (old) old.remove(); if (!a) return; const b = document.createElement("button"); b.className = "n-act"; b.textContent = a.label; b.onclick = a.fn; el.appendChild(b); };
+  set(action);
+  $("#toasts").appendChild(el);
+  let t; const arm = d => { clearTimeout(t); t = setTimeout(() => { el.classList.add("out"); setTimeout(() => { el.remove(); if (img) URL.revokeObjectURL(img); }, 250); }, d); };
+  el.onmouseenter = () => clearTimeout(t); el.onmouseleave = () => arm(1500);
+  arm(ms);
+  return { el, set, sub: txt => { const sp = el.querySelector(".n-txt span"); if (sp) sp.textContent = txt; }, arm, born: Date.now() };
 }
 // After a seek, make the browser redraw the picture layer, in case it got stuck showing an old frame.
 let repaintT = 0;
@@ -1716,7 +1744,9 @@ async function screenshot(){
   shotsMem.unshift(shot);
   try { await idb("readwrite", st => st.put(shot)); } catch {}
   if (S.autoDl) download(blob, fileNameFor(shot));
-  osd("Saved shot " + fmt(shot.t)); renderShots();
+  renderShots();
+  // a small card at the top left with the picture; the desktop app adds "Show in folder" once the file is written
+  lastShotCard = notify({ img: URL.createObjectURL(blob), title: "Screenshot saved", sub: fmt(shot.t) + " · " + c.width + "×" + c.height, ms: 3200 });
 }
 const fileNameFor = s => `${safeName(s.name)} ${fmt(s.t).replace(/:/g, "-")}.${s.ext}`;
 async function loadShots(){
@@ -2398,16 +2428,22 @@ async function readSubText(f){
 /* ================= subtitle tracks ================= */
 let subs = [], activeSub = -1, lastSub = -1, job = { dead: true };
 function makeSubEntry(o){
-  const e = { ...o, tt: null, pgs: null, count: 0, status: o.kind === "image" ? "image" : o.native ? "idle" : "loading", progress: 0, offset: 0, lastOpen: null };
+  const e = { ...o, tt: null, pgs: null, count: 0, status: o.kind === "image" ? "image" : o.native ? "idle" : "loading", progress: 0, offset: 0, scale: 1, lastOpen: null };
   if (o.kind === "text") { e.tt = v.addTextTrack("subtitles", o.label, langCode(o.lang) || ""); e.tt.mode = "disabled"; }
   if (o.kind === "pgs") { e.pgs = { displays: [] }; e.pgs.parser = new PgsParser((pts, w, h, items) => pgsStore(e, pts, w, h, items)); }
   subs.push(e); return e;
 }
+// Subtitle timing: each cue keeps its original times (_s/_e); shown time = original × scale + offset.
+const cueT = (e, t) => Math.max(0, t * (e.scale || 1) + (e.offset || 0));
+function retime(e){
+  const c = e.tt ? e.tt.cues : null; if (!c) return;
+  for (let i = 0; i < c.length; i++) { const q = c[i]; if (q._s == null) continue; q.startTime = cueT(e, q._s); q.endTime = Math.max(q.startTime + 0.05, cueT(e, q._e)); }
+}
 function pushCue(e, start, end, text, top){
-  if (e.lastOpen) { const p = e.lastOpen; p.endTime = Math.max(p.startTime + .5, Math.min(p.startTime + 6, start + e.offset)); e.lastOpen = null; }
+  if (e.lastOpen) { const p = e.lastOpen; p._e = Math.max(p._s + .5, Math.min(p._s + 6, start)); p.endTime = cueT(e, p._e); e.lastOpen = null; }
   if (end == null || end <= start) end = start + 4;
   try {
-    const c = new VTTCue(start + e.offset, end + e.offset, text);
+    const c = new VTTCue(cueT(e, start), cueT(e, end), text); c._s = start; c._e = end;
     if (top) { c.line = 0; c.top = true; }
     e.tt.addCue(c); e.count++;
     if (end === start + 4) e.lastOpen = c;
@@ -2444,10 +2480,38 @@ function cycleSub(){
   selectSub(next); osd(next < 0 ? "Subtitles off" : "Subtitles: " + subs[next].label);
 }
 const fmtOff = o => (o > 0 ? "+" : o < 0 ? "−" : "") + Math.abs(o).toFixed(1) + "s";
+// Line the subtitles up with the speech: Crave listens to a few minutes of the sound around where you are.
+let syncing = false;
+async function syncSub(e, quiet){
+  e = e || subs[activeSub];
+  if (!e || !e.tt) { if (!quiet) toast("Turn on text subtitles first.", true); return false; }
+  if (!N || !N.subsSync || !nativeInput()) { if (!quiet) toast("Automatic sync works in the Crave desktop app.", true); return false; }
+  if (syncing) return false;
+  const cues = [...(e.tt.cues || [])].filter(q => q._s != null).map(q => [q._s, q._e]);
+  if (cues.length < 8) { if (!quiet) toast("Not enough subtitle lines loaded yet. Try again in a moment.", true); return false; }
+  const me = cur, from = Math.max(0, v.currentTime - 20), dur = Math.min(300, Math.max(60, (isFinite(v.duration) ? v.duration : 1e9) - from));
+  syncing = true; renderMenuIfOpen();
+  const card = quiet ? null : notify({ title: "Syncing subtitles…", sub: "Listening to the next few minutes", ms: 60000 });
+  try {
+    const r = await N.subsSync({ input: nativeInput(), track: (ext && ext.ai) || cur.audioIdx || 0, from, dur, cues });
+    if (cur !== me || !subs.includes(e)) return false;
+    if (!r.confident) { if (card) { card.el.querySelector("strong").textContent = "Couldn't sync confidently"; card.sub("Use Earlier / Later (G and H) to adjust"); card.arm(4500); } return false; }
+    const before = e.offset, beforeScale = e.scale;
+    e.scale = r.scale; e.offset = r.offset; retime(e); renderCues(); renderMenuIfOpen();
+    const moved = Math.abs(r.offset - before) >= 0.05 || r.scale !== beforeScale;
+    const msg = r.scale !== 1 ? `Stretched for a different frame rate and shifted ${fmtOff(r.offset)}` : moved ? `Shifted ${fmtOff(r.offset)}` : "They were already in sync";
+    if (card) { card.el.querySelector("strong").textContent = "Subtitles synced"; card.sub(msg); card.arm(3500); }
+    else if (moved) notify({ title: "Subtitles synced to the speech", sub: msg, ms: 3500 });
+    return true;
+  } catch (err) {
+    if (card) { card.el.querySelector("strong").textContent = "Couldn't sync"; card.sub(String(err && err.message || err).replace(/^Error invoking remote method '[^']+': (Error: )?/, "")); card.arm(4500); }
+    return false;
+  } finally { syncing = false; renderMenuIfOpen(); }
+}
 function shiftSub(d){
   const e = subs[activeSub]; if (!e) { osd("Turn subtitles on first"); return; }
-  e.offset = Math.round((e.offset + d) * 10) / 10;
-  const c = e.tt ? e.tt.cues : null; if (c) for (let i = 0; i < c.length; i++) { c[i].startTime = Math.max(0, c[i].startTime + d); c[i].endTime = Math.max(.1, c[i].endTime + d); }
+  e.offset = Math.round((e.offset + d) * 100) / 100;
+  retime(e);
   renderCues(); pgsKick();
   osd("Subtitle delay " + fmtOff(e.offset)); renderMenuIfOpen();
 }
@@ -2488,7 +2552,7 @@ async function ensureEnglishSubs(me){
     if (activeSub >= 0 && subs[activeSub] && isEnglish(subs[activeSub].lang, subs[activeSub].label)) return;
     const who = r.identified && r.identified.title ? r.identified.title + (r.identified.season ? ` S${String(r.identified.season).padStart(2, "0")}E${String(r.identified.episode).padStart(2, "0")}` : "") : (r.release || "");
     const e = await addSubFile(new File([r.data], r.name), { label: "English · " + r.source, lang: "en", source: "online", quiet: true });
-    if (e) toast("English subtitles from " + r.source + (who ? ": " + who : "")); else offer("");
+    if (e) { toast("English subtitles from " + r.source + (who ? ": " + who : "")); setTimeout(() => { if (cur === me && subs[activeSub] === e) syncSub(e, true); }, 1500); } else offer("");
   } catch (err) { console.warn("Crave: couldn't fetch English subtitles", err); offer(""); }
 }
 
@@ -3785,6 +3849,7 @@ async function ssDownload(i, btn){
     const e = await addSubFile(new File([r.data], r.name), { label, lang: x.lang || q.lang, source: "online", quiet: true });
     if (!e) throw new Error("the file had no subtitle lines in it");
     btn.textContent = "Loaded ✓";
+    setTimeout(() => { if (cur === me && subs[activeSub] === e) syncSub(e, true); }, 1500);
     if (r.osRemaining != null) $("#ssQuota").textContent = `OpenSubtitles downloads left today: ${r.osRemaining}`;
     toast(`Subtitles on: ${label}${r.savedTo ? " · saved next to the video" : ""}`);
     setTimeout(() => { if ($("#subSearchDlg").open) $("#subSearchDlg").close(); }, 700);
@@ -3964,13 +4029,14 @@ function renderMenu(){
     });
     if (!subs.length) h += `<p class="note">${cur && cur.probing ? "Checking this file for built-in subtitles…" : cur && cur.kind === "file" ? "This file has no built-in subtitles." : "Built-in subtitles are read from files on your computer. For links, load a subtitle file."}</p>`;
     h += `<div class="sep"></div>${N && N.subsSearch ? `<button class="mi" data-act="search">${ck(false)}<span><span class="a">Search online…</span><span class="b">OpenSubtitles.com and SubDL</span></span></button>` : ""}<button class="mi" data-act="style">${ck(false)}<span><span class="a">Subtitle style…</span><span class="b">Colour, background, opacity, size</span></span></button><button class="mi" data-act="load">${ck(false)}<span><span class="a">Load subtitle file…</span><span class="b">.srt, .vtt, .ass or .ssa</span></span></button>`;
-    if (activeSub >= 0) h += `<div class="delay"><span style="flex:1">Timing <span class="mono" style="color:var(--honey)">${fmtOff(subs[activeSub].offset)}</span></span><button class="btn sm" data-d="-0.5">Earlier</button><button class="btn sm" data-d="0.5">Later</button></div><p class="note" style="padding-top:0">G and H nudge by 0.1 s.</p>`;
+    if (activeSub >= 0) h += `<div class="delay"><span style="flex:1">Timing <span class="mono" style="color:var(--honey)">${fmtOff(subs[activeSub].offset)}</span></span><button class="btn sm" data-d="-0.5">Earlier</button><button class="btn sm" data-d="0.5">Later</button></div>${N && N.subsSync && subs[activeSub].tt ? `<button class="mi" data-act="sync" ${syncing ? "disabled" : ""}>${ck(false)}<span><span class="a">${syncing ? "Syncing…" : "Sync to speech"}</span><span class="b">Lines the subtitles up with the dialogue automatically</span></span></button>` : ""}<p class="note" style="padding-top:0">G and H nudge by 0.1 s.</p>`;
     m.innerHTML = h;
     m.querySelectorAll("[data-sub]").forEach(b => b.onclick = () => selectSub(+b.dataset.sub));
     m.querySelector('[data-act="load"]').onclick = () => { closeMenu(); $("#subInput").click(); };
     const sb = m.querySelector('[data-act="search"]'); if (sb) sb.onclick = () => { closeMenu(); openSubSearch(); };
     m.querySelector('[data-act="style"]').onclick = () => { closeMenu(); if (!v.paused) v.pause(); switchView("settings"); $("#subStyleCard").scrollIntoView({ behavior: "smooth", block: "start" }); };
     m.querySelectorAll("[data-d]").forEach(b => b.onclick = () => shiftSub(+b.dataset.d));
+    const sy = m.querySelector('[data-act="sync"]'); if (sy) sy.onclick = () => syncSub();
   } else if (menuKind === "more") {
     const abTxt = ab.a == null ? "Off" : ab.b == null ? `From ${fmt(ab.a)}, press again to set the end` : `${fmt(ab.a)} to ${fmt(ab.b)}`;
     m.innerHTML = `<h4>More</h4>
@@ -4042,7 +4108,11 @@ if (N) {
     if (files.length) handleFiles(files);
     else if (links.length) { const d = detect(links[0]); if (d) { switchView("board"); play(d); } }
   });
-  N.onSaved(p => toast("Saved to " + p));
+  N.onSaved(p => {
+    const c = lastShotCard;
+    if (c && Date.now() - c.born < 4000 && document.body.contains(c.el)) { c.set({ label: "Show", fn: () => N.showItem(p) }); c.arm(4000); }
+    else notify({ title: "Saved", sub: p.split(/[\\/]/).pop(), action: { label: "Show", fn: () => N.showItem(p) } });
+  });
   const row = document.createElement("div"); row.className = "set";
   row.style.display = "block";
   row.innerHTML = `<div class="d"><strong>Save locations</strong><span>Screenshots save here when "Save shots to a folder as you take them" is on, or when you download them from Shots.</span></div>

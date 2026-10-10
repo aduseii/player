@@ -59,6 +59,7 @@ contextBridge.exposeInMainWorld("craveNative", {
   subsSearch: q => ipcRenderer.invoke("subs-search", q),
   subsDownload: o => ipcRenderer.invoke("subs-download", o),
   setTheme: m => ipcRenderer.invoke("set-theme", m),
+  subsSync: o => ipcRenderer.invoke("subs-sync", o),
   subsAutoEn: o => ipcRenderer.invoke("subs-auto-en", o),
   sidecarSubs: p => ipcRenderer.invoke("sidecar-subs", p)
 });

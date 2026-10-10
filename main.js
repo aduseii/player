@@ -674,6 +674,56 @@ async function subsDownloadNow({ provider, id, lang, season, episode, saveNextTo
 }
 ipcMain.handle("subs-download", (_e, o) => subsDownloadNow(o));
 
+/* ---------- subtitle sync: line the subtitles up with the speech in the video ----------
+   Reads a few minutes of the sound, marks where people are talking (10 ms steps), then finds the
+   shift (and, for subtitles made for a different frame rate, the stretch) where the subtitle lines
+   best cover the talking. */
+function speechFrames(input, track, from, dur){
+  return new Promise((resolve, reject) => {
+    const args = ["-hide_banner", "-nostdin", "-loglevel", "error", "-ss", Math.max(0, from).toFixed(2), ...netIn(input), "-i", input, "-t", dur.toFixed(2),
+      "-map", `0:a:${track || 0}`, "-vn", "-sn", "-ac", "1", "-ar", "16000", "-af", "highpass=f=200,lowpass=f=3400", "-f", "s16le", "pipe:1"];
+    const p = spawn(ffmpegPath(), args, { windowsHide: true }); const parts = []; let err = "";
+    p.stdout.on("data", d => parts.push(d)); p.stderr.on("data", d => { err = (err + d).slice(-800); });
+    p.on("error", reject);
+    p.on("close", () => {
+      const buf = Buffer.concat(parts), n = Math.floor(buf.length / 2 / 160);
+      if (n < 1000) return reject(new Error(err.trim().split("\n").pop() || "couldn't read the sound"));
+      const db = new Float32Array(n);
+      for (let f = 0; f < n; f++) { let sum = 0; for (let i = 0; i < 160; i++) { const x = buf.readInt16LE((f * 160 + i) * 2) / 32768; sum += x * x; } db[f] = 10 * Math.log10(sum / 160 + 1e-10); }
+      const sorted = Array.from(db).sort((a, b) => a - b), floor = sorted[Math.floor(n * 0.2)], loud = sorted[Math.floor(n * 0.95)];
+      const thr = Math.max(-55, floor + Math.max(6, (loud - floor) * 0.35));
+      // talking = above the threshold, widened equally on both sides (so the estimate isn't pulled late)
+      const raw = new Uint8Array(n); for (let f = 0; f < n; f++) raw[f] = db[f] > thr ? 1 : 0;
+      const A = new Int8Array(n).fill(-1), W = 6;
+      for (let f = 0; f < n; f++) if (raw[f]) for (let k = Math.max(0, f - W); k <= Math.min(n - 1, f + W); k++) A[k] = 1;
+      resolve(A);
+    });
+  });
+}
+ipcMain.handle("subs-sync", async (_e, { input, track, from, dur, cues }) => {
+  if (!input) throw new Error("this video can't be analysed");
+  if (!cues || cues.length < 8) throw new Error("not enough subtitle lines loaded yet");
+  const A = await speechFrames(input, track, from, dur), n = A.length, step = 0.01;
+  const P = new Int32Array(n + 1); for (let i = 0; i < n; i++) P[i + 1] = P[i] + A[i];
+  const score = (scale, off) => { let sc = 0;
+    for (const [a, b] of cues) { let i = Math.round((a * scale + off - from) / step), j = Math.round((b * scale + off - from) / step);
+      if (j <= 0 || i >= n) continue; i = Math.max(0, i); j = Math.min(n, j); sc += P[j] - P[i]; }
+    return sc; };
+  const centre = from + n * step / 2, results = [];
+  for (const scale of [1, 25 / 23.976, 23.976 / 25, 24 / 23.976, 23.976 / 24, 25 / 24, 24 / 25]) {
+    const base = centre - centre * scale;          // the offset that keeps the middle of the window in place
+    let best = -Infinity, bestOff = 0; const all = [];
+    for (let o = -90; o <= 90; o += 0.05) { const v = score(scale, base + o); all.push(v); if (v > best) { best = v; bestOff = base + o; } }
+    for (let o = bestOff - 0.06; o <= bestOff + 0.06; o += 0.01) { const v = score(scale, o); if (v > best) { best = v; bestOff = o; } }
+    const mean = all.reduce((x, y) => x + y, 0) / all.length, sd = Math.sqrt(all.reduce((x, y) => x + (y - mean) ** 2, 0) / all.length) || 1;
+    results.push({ scale, offset: Math.round(bestOff * 100) / 100, score: best, z: (best - mean) / sd });
+  }
+  results.sort((a, b) => b.score - a.score);
+  let r = results[0]; const plain = results.find(x => x.scale === 1);
+  if (r.scale !== 1 && r.score < plain.score * 1.06 + 20) r = plain;   // only stretch when it clearly fits better
+  const speech = A.reduce((x, y) => x + (y > 0 ? 1 : 0), 0) / n;
+  return { offset: r.offset, scale: r.scale, z: Math.round(r.z * 10) / 10, confident: r.z >= 4.5 && speech > 0.08 && speech < 0.92, speech: Math.round(speech * 100) };
+});
 // The OpenSubtitles hash of a streamed file, from two small range requests (first and last 64 KB).
 async function urlMovieHash(u){
   const get = async range => {
@@ -718,7 +768,10 @@ ipcMain.handle("subs-auto-en", async (_e, { input, fileName, guess = {}, saveNex
       const ep = q.episode || (id && id.episode);
       if (ep) hits = hits.filter(x => !x.episode || +x.episode === +ep);
       if (q.strict && guess.title) { const want = simpleWords(guess.title); hits = hits.filter(x => !want.length || simpleWords(x.title + " " + x.release).some(w => want.includes(w))); }
-      hits.sort((a, b) => (+a.hi - +b.hi) || (+a.fullSeason - +b.fullSeason) || (b.downloads - a.downloads));
+      // prefer subtitles made for this release (same group, source and resolution as the video's file name)
+      const tok = x => new Set(String(x || "").toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 1 && !/^(the|and|mkv|mp4|srt)$/.test(w)));
+      const mine = tok(fileName || ""), fit = x => { let k = 0; for (const w of tok(x.release)) if (mine.has(w)) k++; return k; };
+      hits.sort((a, b) => (fit(b) - fit(a)) || (+a.hi - +b.hi) || (+a.fullSeason - +b.fullSeason) || (b.downloads - a.downloads));
       if (!hits.length) continue;
       const x = hits[0];
       const d = await subsDownloadNow({ provider: "subdl", id: x.id, lang: "en", season: x.season || q.season || (id && id.season), episode: x.episode || ep, saveNextTo });
