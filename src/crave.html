@@ -1496,7 +1496,7 @@ function syncPlay(){
   poke();
 }
 function renderTime(){
-  const d = v.duration, t = v.currentTime;
+  const d = v.duration, t = playhead();
   const live = d === Infinity;
   $("#timeCur").textContent = live ? "Live" : fmt(t);
   $("#timeEnd").textContent = live ? fmt(t) : !isFinite(d) ? "–:––" : S.remaining ? "−" + fmt(Math.max(0, d - t)) : fmt(d);
@@ -1566,7 +1566,22 @@ for (const [id, dir] of [["#framePrev", -1], ["#frameNext", 1]]) {
 document.addEventListener("keyup", e => { if (holdBy === "key" && /^[,.we]$/i.test(e.key)) stopHold(); });
 window.addEventListener("blur", stopHold);
 const togglePlay = () => { if (!cur) { $("#fileInput").click(); return; } if (v.paused) v.play().catch(() => {}); else v.pause(); osd(v.paused ? "Paused" : "▶"); };
-function skip(sec){ if (!cur || !isFinite(v.duration)) return; v.currentTime = Math.max(0, Math.min(v.duration - .1, v.currentTime + sec)); osd((sec > 0 ? "+" : "−") + Math.abs(sec) + "s"); }
+/* ---- smooth seeking: never stack seeks. While one is in progress only the latest target is kept and
+   applied when it finishes, so rapid skips and scrubbing stay responsive instead of queueing up. ---- */
+var seekTarget = null;   // var: read by renderTime, which can run before this line
+function seekTo(t){
+  if (!isFinite(v.duration)) return;
+  t = Math.max(0, Math.min(v.duration - .05, t));
+  seekTarget = t; renderTime();
+  if (!v.seeking) v.currentTime = t;
+}
+v.addEventListener("seeked", () => {
+  if (seekTarget != null && Math.abs(v.currentTime - seekTarget) > 0.05) { v.currentTime = seekTarget; return; }   // a newer target arrived meanwhile
+  seekTarget = null; renderTime();
+});
+v.addEventListener("emptied", () => { seekTarget = null; });
+function playhead(){ return seekTarget != null ? seekTarget : v.currentTime; }
+function skip(sec){ if (!cur || !isFinite(v.duration)) return; seekTo(playhead() + sec); osd((sec > 0 ? "+" : "−") + Math.abs(sec) + "s"); }
 function setSpeed(r){ r = Math.max(.25, Math.min(4, Math.round(r * 100) / 100)); v.playbackRate = r; osd(r + "×"); }
 function setVolume(x){ vol.muted = false; vol.level = Math.round(Math.max(0, Math.min(1, x)) * 100) / 100; applyVol(); hideBanner("muted"); osd("Volume " + Math.round(vol.level * 100) + "%"); }
 
@@ -1668,16 +1683,16 @@ function renderSkipLabels(){ $("#backLbl").textContent = S.skip; $("#fwdLbl").te
 const seek = $("#seek");
 function seekPct(e){ const r = seek.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); }
 let dragging = false;
-seek.addEventListener("pointerdown", e => { if (!isFinite(v.duration)) return; dragging = true; seek.classList.add("drag"); seek.setPointerCapture(e.pointerId); v.currentTime = seekPct(e) * v.duration; });
+seek.addEventListener("pointerdown", e => { if (!isFinite(v.duration)) return; dragging = true; seek.classList.add("drag"); seek.setPointerCapture(e.pointerId); if (ext) ext.a.pause(); seekTo(seekPct(e) * v.duration); });
 seek.addEventListener("pointermove", e => {
   if (!isFinite(v.duration)) return;
   const p = seekPct(e), tip = $("#seekTip");
   tip.hidden = false; tip.style.left = Math.max(24, Math.min(seek.clientWidth - 24, p * seek.clientWidth)) + "px";
   const near = currentMarks().find(m => Math.abs(m.t - p * v.duration) < v.duration * 0.008);
   tip.textContent = fmt(p * v.duration) + (near && near.label ? " · " + near.label : "");
-  if (dragging) v.currentTime = p * v.duration;
+  if (dragging) seekTo(p * v.duration);
 });
-seek.addEventListener("pointerup", () => { dragging = false; seek.classList.remove("drag"); });
+seek.addEventListener("pointerup", () => { if (!dragging) return; dragging = false; seek.classList.remove("drag"); extTo(playhead()); if (ext && !v.paused) ext.a.play().catch(() => {}); });
 seek.addEventListener("pointerleave", () => { if (!dragging) $("#seekTip").hidden = true; });
 
 // idle-hide HUD
@@ -2792,7 +2807,15 @@ v.addEventListener("playing", () => {
 });
 v.addEventListener("pause", () => { if (ext) ext.a.pause(); });
 v.addEventListener("waiting", () => { if (ext) ext.a.pause(); });
-v.addEventListener("seeking", () => extTo(v.currentTime));
+// Crave's decoder: follow the picture once it settles, not every step of a scrub or a burst of skips.
+let extSeekT = 0;
+v.addEventListener("seeking", () => {
+  if (!ext) return;
+  if (ext.live && !ext.has(Math.max(0, v.currentTime - aDelay()))) ext.a.pause();
+  clearTimeout(extSeekT);
+  if (dragging) return;                                   // applied on release
+  extSeekT = setTimeout(() => { if (!v.seeking || !ext.live) extTo(playhead()); else extTo(seekTarget != null ? seekTarget : v.currentTime); }, ext.live ? 160 : 0);
+});
 v.addEventListener("ratechange", () => { if (ext) ext.a.playbackRate = v.playbackRate; });
 setInterval(() => { if (ext && !v.paused) v.dispatchEvent(new Event("timeupdate")); }, 250);   // sync check 4x a second
 // When the sound is still on its way, the picture waits for it (like buffering) instead of the
@@ -2822,7 +2845,7 @@ setInterval(() => {
   }
 }, 250);
 v.addEventListener("timeupdate", () => {
-  if (!ext || v.paused) return;
+  if (!ext || v.paused || v.seeking || dragging || seekTarget != null) return;
   const want = Math.max(0, v.currentTime - aDelay()), drift = ext.a.currentTime - want;
   if (ext.live && ext.aheadAt(want) < 0.25 && !bannerShown("audio")) {
     const dur = (isFinite(v.duration) && v.duration) || 0;
