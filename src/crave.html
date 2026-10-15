@@ -923,8 +923,8 @@ html[data-theme="light"] .n-act{background:rgba(20,22,43,.07)}
               <button class="cb big" id="playBtn" title="Play (Space)"><svg class="i"><use href="#i-play"/></svg></button>
               <button class="cb num" id="backBtn" title="Back (J)"><svg class="i"><use href="#i-back"/></svg><span class="lbl" id="backLbl">10</span></button>
               <button class="cb num" id="fwdBtn" title="Forward (L)"><svg class="i"><use href="#i-fwd"/></svg><span class="lbl" id="fwdLbl">10</span></button>
-              <button class="cb hide-sm frame-btn" id="framePrev" title="Previous frame (,)" aria-label="Previous frame"><svg class="i" viewBox="0 0 24 24"><path d="M6 5v14"/><path d="M18 5.5 9 12l9 6.5z" fill="currentColor"/></svg></button>
-              <button class="cb hide-sm frame-btn" id="frameNext" title="Next frame (.)" aria-label="Next frame"><svg class="i" viewBox="0 0 24 24"><path d="M18 5v14"/><path d="M6 5.5 15 12l-9 6.5z" fill="currentColor"/></svg></button>
+              <button class="cb hide-sm frame-btn" id="framePrev" title="Previous frame (W) · hold to keep going" aria-label="Previous frame"><svg class="i" viewBox="0 0 24 24"><path d="M6 5v14"/><path d="M18 5.5 9 12l9 6.5z" fill="currentColor"/></svg></button>
+              <button class="cb hide-sm frame-btn" id="frameNext" title="Next frame (E) · hold to keep going" aria-label="Next frame"><svg class="i" viewBox="0 0 24 24"><path d="M18 5v14"/><path d="M6 5.5 15 12l-9 6.5z" fill="currentColor"/></svg></button>
               <button class="cb hide-sm" id="nextBtn" title="Next in Up next (N)"><svg class="i"><use href="#i-next"/></svg></button>
               <div class="vol">
                 <button class="cb" id="muteBtn" title="Mute (M)"><svg class="i"><use href="#i-vol"/></svg></button>
@@ -1107,7 +1107,7 @@ html[data-theme="light"] .n-act{background:rgba(20,22,43,.07)}
     <kbd>J</kbd><span>Back one skip interval</span>
     <kbd>L</kbd><span>Forward one skip interval</span>
     <kbd>← →</kbd><span>Back / forward 5 seconds</span>
-    <kbd>, .</kbd><span>Previous / next frame (pauses; hold to keep stepping)</span>
+    <kbd>W E</kbd><span>Previous / next frame (pauses; hold to keep going). , and . work too</span>
     <kbd>↑ ↓</kbd><span>Volume</span>
     <kbd>[ ]</kbd><span>Slower / faster</span>
     <kbd>0–9</kbd><span>Jump to 0%–90%</span>
@@ -1115,7 +1115,7 @@ html[data-theme="light"] .n-act{background:rgba(20,22,43,.07)}
     <kbd>X</kbd><span>Clip mode on / off</span>
     <kbd>Q</kbd><span>Side panel: Up next, marks, source</span>
     <kbd>I O</kbd><span>Set clip start / end (in clip mode)</span>
-    <kbd>E</kbd><span>HDR mode: Off, Natural, Vivid</span>
+    <kbd>R</kbd><span>HDR mode: Off, Natural, Vivid</span>
     <kbd>- =</kbd><span>Audio delay earlier / later by 50 ms</span>
     <kbd>S</kbd><span>Screenshot</span>
     <kbd>A</kbd><span>Set loop start, end, then clear</span>
@@ -1542,8 +1542,29 @@ function stepFrame(dir){
   const ms = Math.round(Math.max(0, idx) / fps * 1000), tc = fmt(Math.floor(ms / 1000)) + "." + String(ms % 1000).padStart(3, "0");
   osd((dir > 0 ? "Next frame" : "Previous frame") + " · " + tc + " · frame " + Math.max(0, idx).toLocaleString());
 }
-$("#framePrev").onclick = () => stepFrame(-1);
-$("#frameNext").onclick = () => stepFrame(1);
+// Hold to keep stepping: one frame at once, then a steady run after a short pause (button or key).
+let holdT = 0, holdBy = null;
+function holdStep(dir, by){
+  stopHold(); holdBy = by; stepFrame(dir);
+  const fps = frameRate(), every = Math.max(50, Math.min(125, 1000 / Math.min(fps, 12)));   // up to 12 frames a second
+  let last = performance.now() + 380 - every;
+  const run = () => {
+    if (!holdBy) return;
+    const now = performance.now();
+    if (v.seeking || now - last < every) { holdT = setTimeout(run, v.seeking ? 15 : every - (now - last)); return; }   // wait for the frame to show
+    last = now; stepFrame(dir); holdT = setTimeout(run, every);
+  };
+  holdT = setTimeout(run, 380);
+}
+function stopHold(){ clearTimeout(holdT); holdT = 0; holdBy = null; }
+for (const [id, dir] of [["#framePrev", -1], ["#frameNext", 1]]) {
+  const b = $(id);
+  b.addEventListener("pointerdown", e => { if (e.button !== 0) return; e.preventDefault(); b.setPointerCapture(e.pointerId); holdStep(dir, "mouse"); });
+  for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) b.addEventListener(ev, () => { if (holdBy === "mouse") stopHold(); });
+  b.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); stepFrame(dir); } });
+}
+document.addEventListener("keyup", e => { if (holdBy === "key" && /^[,.we]$/i.test(e.key)) stopHold(); });
+window.addEventListener("blur", stopHold);
 const togglePlay = () => { if (!cur) { $("#fileInput").click(); return; } if (v.paused) v.play().catch(() => {}); else v.pause(); osd(v.paused ? "Paused" : "▶"); };
 function skip(sec){ if (!cur || !isFinite(v.duration)) return; v.currentTime = Math.max(0, Math.min(v.duration - .1, v.currentTime + sec)); osd((sec > 0 ? "+" : "−") + Math.abs(sec) + "s"); }
 function setSpeed(r){ r = Math.max(.25, Math.min(4, Math.round(r * 100) / 100)); v.playbackRate = r; osd(r + "×"); }
@@ -2046,7 +2067,7 @@ document.addEventListener("keydown", e => {
     case "q": toggleDrawer(); break;
     case "i": if (clip.on) { setClipEdge("a", v.currentTime); osd("Clip start " + fmt(clip.a)); } else hit = false; break;
     case "o": if (clip.on) { setClipEdge("b", v.currentTime); osd("Clip end " + fmt(clip.b)); } else hit = false; break;
-    case "e": cycleHdr(); break;
+    case "r": cycleHdr(); break;
     case "-": nudgeDelay(-50); break;
     case "=": nudgeDelay(50); break;
     case "a": cycleAB(); break;
@@ -2057,8 +2078,8 @@ document.addEventListener("keydown", e => {
     case "n": playNext(); break;
     case "[": setSpeed(v.playbackRate - .25); break;
     case "]": setSpeed(v.playbackRate + .25); break;
-    case ",": stepFrame(-1); break;
-    case ".": stepFrame(1); break;
+    case ",": case "w": if (!e.repeat) holdStep(-1, "key"); break;
+    case ".": case "e": if (!e.repeat) holdStep(1, "key"); break;
     default:
       if (/^[0-9]$/.test(k) && isFinite(v.duration)) v.currentTime = v.duration * (+k / 10); else hit = false;
   }
