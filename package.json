@@ -1,6 +1,6 @@
 {
   "name": "crave",
-  "version": "1.15.1",
+  "version": "1.16.0",
   "description": "Crave video player",
   "main": "main.js",
   "scripts": {
@@ -41,6 +41,7 @@
     },
     "files": [
       "main.js",
+      "streamcache.js",
       "preload.js",
       "app/**/*",
       "build/icon.png",

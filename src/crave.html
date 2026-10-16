@@ -1067,6 +1067,8 @@ html[data-theme="light"] .n-act{background:rgba(20,22,43,.07)}
         <label class="switch"><input type="checkbox" id="setSidecar"><i></i></label></div>
       <div class="set" id="saveSubsRow" hidden><div class="d"><strong>Save downloaded subtitles next to the video</strong><span>Keeps a copy (Movie.en.srt) so it loads next time, here and in other players.</span></div>
         <label class="switch"><input type="checkbox" id="setSaveSubs"><i></i></label></div>
+      <div class="set" id="streamCacheRow" hidden><div class="d"><strong>Fast skipping on links</strong><span>Plays links through Crave's stream cache: several connections, reads ahead, keeps what it fetched. Applies to the next link you open.</span></div>
+        <label class="switch"><input type="checkbox" id="setStreamCache"><i></i></label></div>
       <div class="set"><div class="d"><strong>Ambient glow</strong><span>Lights the space around the player with colours from the video.</span></div>
         <label class="switch"><input type="checkbox" id="setAmbient"><i></i></label></div>
       <div class="set"><div class="d"><strong>Subtitles in screenshots</strong><span>Draw the subtitle on screen into saved screenshots.</span></div>
@@ -1175,7 +1177,7 @@ const store = {
   get(k, d){ try { const x = localStorage.getItem("crave:" + k); return x == null ? d : JSON.parse(x); } catch { return d; } },
   set(k, val){ try { localStorage.setItem("crave:" + k, JSON.stringify(val)); } catch {} }
 };
-const DEF = { wm:{ pos:"tl", size:12, opacity:100, margin:3, preview:true, last:null }, audio:{ decoder:"auto", surround:false, night:false, dialogue:false }, theme:"dark", ctrlLayout:"below", ambient:true, subPos:7, sidecarSubs:true, saveSubs:true, subLang:"en", shotSubs:true, subStyle:{ color:"#ffffff", edge:"shadow", bg:"none", bgColor:"#000000", bgOpacity:60 }, hdr:"off", subSize:"medium", autoSubs:true, skip:10, speed:1, fmt:"image/png", autoDl:false, resume:true, autoNext:true, stats:true, volume:1, muted:false };
+const DEF = { wm:{ pos:"tl", size:12, opacity:100, margin:3, preview:true, last:null }, audio:{ decoder:"auto", surround:false, night:false, dialogue:false }, theme:"dark", ctrlLayout:"below", streamCache:true, ambient:true, subPos:7, sidecarSubs:true, saveSubs:true, subLang:"en", shotSubs:true, subStyle:{ color:"#ffffff", edge:"shadow", bg:"none", bgColor:"#000000", bgOpacity:60 }, hdr:"off", subSize:"medium", autoSubs:true, skip:10, speed:1, fmt:"image/png", autoDl:false, resume:true, autoNext:true, stats:true, volume:1, muted:false };
 const S = Object.assign({}, DEF, store.get("settings", {}));
 const saveSettings = () => store.set("settings", S);
 // Appearance: light, dark, or follow Windows. Set before anything draws so there is no flash.
@@ -1343,7 +1345,17 @@ async function play(src, opts = {}){
     if (cur.kind === "file") {
       if (/\.torrent$/i.test(cur.file.name)) { await playTorrent(cur.file); }
       else { if (cur.file.url) v.src = cur.file.url; else { cur.blobUrl = URL.createObjectURL(cur.file); v.src = cur.blobUrl; } if (N && N.probe && pathOf(cur.file)) inspectNative(); else inspectFile(cur.file); }
-    } else if (cur.kind === "direct") { playDirect(cur.url, true); if (N && N.probe) inspectNative(); }
+    } else if (cur.kind === "direct") {
+      const me = cur;
+      (async () => {
+        // desktop app: play links through the stream cache (reads ahead, several connections, one download for everything)
+        if (N && N.streamOpen && S.streamCache !== false && /^https?:/i.test(cur.url)) {
+          try { const r = await N.streamOpen(cur.url); if (r && r.url) { cur.playUrl = r.url; cur.streamId = r.id; } else if (r && r.error) console.info("Crave: stream cache not used:", r.error); } catch {}
+        }
+        if (cur !== me) return;
+        playDirect(cur.playUrl || cur.url, true); if (N && N.probe) inspectNative();
+      })();
+    }
     else if (cur.kind === "hls") await playHls(cur.url);
     else if (cur.kind === "dash") await playDash(cur.url);
     else if (cur.kind === "torrent") await playTorrent(cur.url);
@@ -1363,7 +1375,7 @@ function playDirect(url, cors){
 v.addEventListener("error", () => {
   if (!cur) return;
   // A server without CORS headers rejects crossorigin requests; retry plainly (playback works, screenshots won't).
-  if (cur.kind === "direct" && v.dataset.corsTry === "1") { v.dataset.corsTry = "0"; const t = pendingSeek; playDirect(cur.url, false); pendingSeek = t; v.play().catch(()=>{}); return; }
+  if (cur.kind === "direct" && v.dataset.corsTry === "1") { v.dataset.corsTry = "0"; const t = pendingSeek; playDirect(cur.playUrl || cur.url, false); pendingSeek = t; v.play().catch(()=>{}); return; }
   if (engine) return; // hls/dash report their own errors
   const code = v.error && v.error.code;
   const why = code === 4 ? "The link didn't return a video this browser can play. It may be a web page, an expired link, or a format like AVI or HEVC that browsers don't support." :
@@ -1670,6 +1682,7 @@ $("#copyLinkBtn").onclick = () => {
 };
 function stop(){
   toggleDrawer(false);
+  if (N && N.streamCloseAll) N.streamCloseAll();
   saveProgress(); teardown(); cur = null;
   $("#empty").hidden = false; $("#stage").classList.add("is-empty"); $("#hud").hidden = true; $("#nowbar").hidden = true; $("#spinner").hidden = true;
   $("#stageTitle").textContent = ""; $("#stageKind").hidden = true;
@@ -1997,7 +2010,7 @@ function bindSettings(){
   const sel = (id, key, num) => { const el = $(id); el.value = String(S[key]); el.onchange = () => { S[key] = num ? +el.value : el.value; saveSettings(); renderSkipLabels(); }; };
   const sw = (id, key, after) => { const el = $(id); el.checked = !!S[key]; el.onchange = () => { S[key] = el.checked; saveSettings(); after && after(); }; };
   sel("#setSkip", "skip", true); sel("#setSpeed", "speed", true); sel("#setFmt", "fmt");
-  sw("#setAutoDl", "autoDl"); sw("#setShotSubs", "shotSubs"); sw("#setAmbient", "ambient", () => ambient()); sw("#setSidecar", "sidecarSubs"); sw("#setSaveSubs", "saveSubs"); sw("#setResume", "resume"); sw("#setAutoSubs", "autoSubs"); sw("#setAutoNext", "autoNext"); sw("#setStats", "stats", () => { if (cur && cur.torrent) renderStats(); });
+  sw("#setAutoDl", "autoDl"); sw("#setShotSubs", "shotSubs"); sw("#setAmbient", "ambient", () => ambient()); sw("#setStreamCache", "streamCache"); $("#streamCacheRow").hidden = !(N && N.streamOpen); sw("#setSidecar", "sidecarSubs"); sw("#setSaveSubs", "saveSubs"); sw("#setResume", "resume"); sw("#setAutoSubs", "autoSubs"); sw("#setAutoNext", "autoNext"); sw("#setStats", "stats", () => { if (cur && cur.torrent) renderStats(); });
 }
 
 /* ---------------- input: link bar, files, drop, paste ---------------- */
@@ -2651,6 +2664,7 @@ function nativeInput(){
   if (!N || !N.convertAudio || !cur) return null;
   if (cur.kind === "file" && cur.file && !/\.torrent$/i.test(cur.file.name)) return pathOf(cur.file);
   if (cur.torrentUrl) return cur.torrentUrl;
+  if (cur.playUrl) return cur.playUrl;
   if (cur.url && /^https?:/i.test(cur.url)) return cur.url;
   return null;
 }

@@ -302,6 +302,12 @@ function parseProbe(text){
 }
 /* ---------- network inputs: keep reading through dropped connections and slow servers ---------- */
 const NET_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
+/* ---------- stream cache: links play through a local server that reads ahead with several connections ---------- */
+let scache = null;
+const streamCache = () => scache || (scache = require("./streamcache").create({ dir: path.join(app.getPath("temp"), "crave-stream-cache-" + process.pid), ua: NET_UA }));
+ipcMain.handle("stream-open", async (_e, url) => { try { const c = streamCache(); c.closeAll(); return await c.open(url); } catch (e) { return { error: e.message }; } });
+ipcMain.handle("stream-close-all", () => { if (scache) scache.closeAll(); });
+ipcMain.handle("stream-stats", (_e, id) => scache ? scache.stats(id) : null);
 const netIn = input => /^https?:/i.test(String(input || "")) ? ["-user_agent", NET_UA, "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_on_network_error", "1", "-reconnect_on_http_error", "5xx", "-reconnect_delay_max", "8", "-rw_timeout", "30000000"] : [];
 /* ---------- appearance: Windows title bar and window colour follow the app's light/dark choice ---------- */
 const themeFile = () => path.join(app.getPath("userData"), "theme.json");
@@ -853,6 +859,7 @@ app.whenReady().then(initUpdater);
 /* ---------- shutdown ---------- */
 app.on("window-all-closed", () => app.quit());
 app.on("will-quit", () => {
+  try { if (scache) scache.shutdown(); } catch {}
   try { stopAstreams(); for (const p of sstreams.values()) p.kill(); } catch {}
   try { if (clipProc) { clipCancelled = true; clipProc.kill(); } } catch {}
   try { if (ffProc) ffProc.kill(); } catch {}
