@@ -3341,8 +3341,9 @@ function startLive(ai){
   };
   L.flow = () => {
     const ah = L.ahead();
-    if (!L.held && ah > 120) { L.held = true; N.astreamPause(L.id); }
-    else if (L.held && ah < 50) { L.held = false; N.astreamResume(L.id); }
+    // keep 25-45 s of sound ready: plenty for smooth playback, and the decoder isn't reading far ahead on the disk
+    if (!L.held && ah > 45) { L.held = true; N.astreamPause(L.id); }
+    else if (L.held && ah < 25) { L.held = false; N.astreamResume(L.id); }
   };
   L.pump = () => {
     const sb = L.sb; if (!sb || sb.updating) return;

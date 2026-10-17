@@ -53,6 +53,7 @@ if (!app.requestSingleInstanceLock()) {
     sendOpen(openArgs(argv));
   });
   app.whenReady().then(start);
+app.whenReady().then(() => ffSupports());   // learn what the bundled ffmpeg can do, ahead of the first video
 }
 
 function start(){
@@ -334,7 +335,8 @@ ipcMain.handle("probe", (_e, input) => new Promise(resolve => {
 /* ---------- live audio: any codec, converted on the fly from the playback position ---------- */
 const astreams = new Map();
 function stopAstreams(){ for (const p of astreams.values()) { try { p.kill(); } catch {} } astreams.clear(); }
-ipcMain.handle("astream-start", (e, { id, input, track, start, channels = 2, night = false, dialogue = false }) => {
+ipcMain.handle("astream-start", async (e, { id, input, track, start, channels = 2, night = false, dialogue = false }) => {
+  const caps = await ffSupports();
   stopAstreams();
   const args = ["-hide_banner", "-nostdin", "-loglevel", "error"];
   if (start > 0) args.push("-ss", start.toFixed(3));
@@ -343,7 +345,7 @@ ipcMain.handle("astream-start", (e, { id, input, track, start, channels = 2, nig
   af.push(`aformat=channel_layouts=${surround ? "5.1" : "stereo"}`);
   if (dialogue) af.push(surround ? "pan=5.1|FL=FL|FR=FR|FC=1.7*FC|LFE=LFE|BL=BL|BR=BR" : "dialoguenhance=enhance=2.5,aformat=channel_layouts=stereo");
   if (night) af.push("acompressor=threshold=-26dB:ratio=4:attack=5:release=250:makeup=7dB", "alimiter=limit=0.95:level=disabled");
-  args.push("-readrate", "3", "-readrate_initial_burst", "20", ...netIn(input), "-i", input, "-map", `0:a:${track}`, "-vn", "-sn", "-dn", "-af", af.join(","),
+  args.push(...(caps.burst ? pace(caps, 3, 20) : []), ...netIn(input), "-i", input, "-map", `0:a:${track}`, "-vn", "-sn", "-dn", "-af", af.join(","),
     "-c:a", "aac", "-b:a", surround ? "384k" : "192k", "-ac", surround ? "6" : "2", "-ar", "48000",
     "-f", "mp4", "-movflags", "+empty_moov+default_base_moof", "-frag_duration", "500000", "pipe:1");
   const p = spawn(ffmpegPath(), args, { windowsHide: true });
@@ -360,24 +362,56 @@ ipcMain.handle("astream-stop", () => stopAstreams());
 
 /* ---------- live subtitles: text as WebVTT, picture subtitles (PGS) as raw .sup ---------- */
 const sstreams = new Map();
-ipcMain.handle("sub-start", (e, { id, input, track, start, dur, format }) => {
-  const args = ["-hide_banner", "-nostdin", "-loglevel", "error"];
-  if (start > 0) args.push("-ss", start.toFixed(3));
-  // quick start (20 s of video at full speed), then 2x real time: enough to stay ahead of you, without hogging the disk
-  args.push("-copyts", "-readrate", "2", "-readrate_initial_burst", "20", ...netIn(input), "-i", input);
-  if (dur > 0) args.push("-t", dur.toFixed(3));
-  args.push("-map", `0:s:${track}`);
-  args.push(...(format === "sup" ? ["-c:s", "copy", "-f", "sup"] : ["-c:s", "webvtt", "-f", "webvtt"]), "pipe:1");
-  const p = spawn(ffmpegPath(), args, { windowsHide: true });
-  sstreams.set(id, p);
+// What the bundled ffmpeg can do: 6.1+ has a "quick start, then paced" reading option; 6.0 only has pacing.
+let ffCaps = null;
+function ffSupports(){
+  if (!ffCaps) ffCaps = new Promise(res => {
+    if (process.env.CRAVE_NO_BURST) return res({ burst: false, readrate: true });
+    let out = ""; const p = spawn(ffmpegPath(), ["-hide_banner", "-h", "full"], { windowsHide: true });
+    p.stdout.on("data", d => { out += d; }); p.on("error", () => res({ burst: false, readrate: false }));
+    p.on("close", () => res({ burst: /readrate_initial_burst/.test(out), readrate: /-readrate\b/.test(out) }));
+  });
+  return ffCaps;
+}
+// Read pace for background readers: a quick start, then paced, so they don't fight the picture for the disk.
+const pace = (caps, rate, burst) => caps.burst ? ["-readrate", String(rate), "-readrate_initial_burst", String(burst)] : caps.readrate ? ["-readrate", String(rate)] : [];
+ipcMain.handle("sub-start", async (e, { id, input, track, start, dur, format }) => {
+  const caps = await ffSupports();
+  const job = { proc: null, stopped: false }; sstreams.set(id, job);
+  // Without the built-in quick start, read the first 30 s at full speed, then continue paced from there.
+  const phases = [];
+  if (caps.burst || dur > 0) phases.push({ s: start, d: dur, args: pace(caps, 2, 20) });
+  else phases.push({ s: start, d: 30, args: [] }, { s: start + 30, d: 0, args: pace(caps, 2, 0) });
   let err = "";
-  p.stderr.on("data", d => { err = (err + d).slice(-1500); });
-  p.stdout.on("data", d => { if (!e.sender.isDestroyed()) e.sender.send("sub-data", id, d); });
-  p.on("error", er => { if (!e.sender.isDestroyed()) e.sender.send("sub-end", id, -1, er.message); });
-  p.on("close", code => { sstreams.delete(id); if (!e.sender.isDestroyed()) e.sender.send("sub-end", id, code, err.trim().split("\n").pop() || ""); });
+  const done = code => { sstreams.delete(id); if (!e.sender.isDestroyed()) e.sender.send("sub-end", id, code, err.trim().split("\n").pop() || ""); };
+  const run = i => {
+    if (job.stopped) return done(null);
+    const ph = phases[i], args = ["-hide_banner", "-nostdin", "-loglevel", "error"];
+    if (ph.s > 0) args.push("-ss", ph.s.toFixed(3));
+    // -t before -i limits how much of the file is read from the start point (with -copyts an output -t would count from 0)
+    if (ph.d > 0) args.push("-t", ph.d.toFixed(3));
+    args.push("-copyts", ...ph.args, ...netIn(input), "-i", input);
+    args.push("-map", `0:s:${track}`, ...(format === "sup" ? ["-c:s", "copy", "-f", "sup"] : ["-c:s", "webvtt", "-f", "webvtt"]), "pipe:1");
+    const p = spawn(ffmpegPath(), args, { windowsHide: true }); job.proc = p;
+    p.stderr.on("data", d => { err = (err + d).slice(-1500); });
+    // later steps start a fresh WebVTT file: drop its "WEBVTT" header so it doesn't show up as a subtitle line
+    let head = i > 0 && format !== "sup" ? "" : null;
+    p.stdout.on("data", d => {
+      if (head !== null) { head += d.toString("utf8"); const k = head.indexOf("\n\n"); if (k < 0) return; d = Buffer.from(/^\uFEFF?WEBVTT/.test(head) ? head.slice(k + 2) : head, "utf8"); head = null; if (!d.length) return; }
+      if (!e.sender.isDestroyed()) e.sender.send("sub-data", id, d);
+    });
+    p.on("error", er => { err = er.message; });
+    p.on("close", code => {
+      if (code === 0 && i + 1 < phases.length && !job.stopped) {
+        if (format !== "sup" && !e.sender.isDestroyed()) e.sender.send("sub-data", id, Buffer.from("\n\n"));   // close the last line before the next step
+        run(i + 1);
+      } else done(code);
+    });
+  };
+  run(0);
 });
-ipcMain.handle("sub-stop", (_e, id) => { const p = sstreams.get(id); if (p) { try { p.kill(); } catch {} } });
-ipcMain.handle("sub-stop-all", () => { for (const p of sstreams.values()) { try { p.kill(); } catch {} } sstreams.clear(); });
+ipcMain.handle("sub-stop", (_e, id) => { const j = sstreams.get(id); if (j) { j.stopped = true; try { j.proc && j.proc.kill(); } catch {} } });
+ipcMain.handle("sub-stop-all", () => { for (const j of sstreams.values()) { j.stopped = true; try { j.proc && j.proc.kill(); } catch {} } sstreams.clear(); });
 
 /* ---------- clips: cut a part of what's playing and save it ---------- */
 let clipProc = null, clipCancelled = false;
@@ -862,7 +896,7 @@ app.whenReady().then(initUpdater);
 app.on("window-all-closed", () => app.quit());
 app.on("will-quit", () => {
   try { if (scache) scache.shutdown(); } catch {}
-  try { stopAstreams(); for (const p of sstreams.values()) p.kill(); } catch {}
+  try { stopAstreams(); for (const j of sstreams.values()) { j.stopped = true; if (j.proc) j.proc.kill(); } } catch {}
   try { if (clipProc) { clipCancelled = true; clipProc.kill(); } } catch {}
   try { if (ffProc) ffProc.kill(); } catch {}
   try { if (tclient) tclient.destroy(); } catch {}
