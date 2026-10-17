@@ -343,7 +343,7 @@ ipcMain.handle("astream-start", (e, { id, input, track, start, channels = 2, nig
   af.push(`aformat=channel_layouts=${surround ? "5.1" : "stereo"}`);
   if (dialogue) af.push(surround ? "pan=5.1|FL=FL|FR=FR|FC=1.7*FC|LFE=LFE|BL=BL|BR=BR" : "dialoguenhance=enhance=2.5,aformat=channel_layouts=stereo");
   if (night) af.push("acompressor=threshold=-26dB:ratio=4:attack=5:release=250:makeup=7dB", "alimiter=limit=0.95:level=disabled");
-  args.push(...netIn(input), "-i", input, "-map", `0:a:${track}`, "-vn", "-sn", "-dn", "-af", af.join(","),
+  args.push("-readrate", "3", "-readrate_initial_burst", "20", ...netIn(input), "-i", input, "-map", `0:a:${track}`, "-vn", "-sn", "-dn", "-af", af.join(","),
     "-c:a", "aac", "-b:a", surround ? "384k" : "192k", "-ac", surround ? "6" : "2", "-ar", "48000",
     "-f", "mp4", "-movflags", "+empty_moov+default_base_moof", "-frag_duration", "500000", "pipe:1");
   const p = spawn(ffmpegPath(), args, { windowsHide: true });
@@ -363,7 +363,8 @@ const sstreams = new Map();
 ipcMain.handle("sub-start", (e, { id, input, track, start, dur, format }) => {
   const args = ["-hide_banner", "-nostdin", "-loglevel", "error"];
   if (start > 0) args.push("-ss", start.toFixed(3));
-  args.push("-copyts", ...netIn(input), "-i", input);
+  // quick start (20 s of video at full speed), then 2x real time: enough to stay ahead of you, without hogging the disk
+  args.push("-copyts", "-readrate", "2", "-readrate_initial_burst", "20", ...netIn(input), "-i", input);
   if (dur > 0) args.push("-t", dur.toFixed(3));
   args.push("-map", `0:s:${track}`);
   args.push(...(format === "sup" ? ["-c:s", "copy", "-f", "sup"] : ["-c:s", "webvtt", "-f", "webvtt"]), "pipe:1");
@@ -375,6 +376,7 @@ ipcMain.handle("sub-start", (e, { id, input, track, start, dur, format }) => {
   p.on("error", er => { if (!e.sender.isDestroyed()) e.sender.send("sub-end", id, -1, er.message); });
   p.on("close", code => { sstreams.delete(id); if (!e.sender.isDestroyed()) e.sender.send("sub-end", id, code, err.trim().split("\n").pop() || ""); });
 });
+ipcMain.handle("sub-stop", (_e, id) => { const p = sstreams.get(id); if (p) { try { p.kill(); } catch {} } });
 ipcMain.handle("sub-stop-all", () => { for (const p of sstreams.values()) { try { p.kill(); } catch {} } sstreams.clear(); });
 
 /* ---------- clips: cut a part of what's playing and save it ---------- */

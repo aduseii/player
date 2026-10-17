@@ -2850,7 +2850,7 @@ setInterval(() => {
   if (!soundHold) return;
   if (!ext || !ext.live || !cur || cur.id !== soundHold.id) { releaseSound(false); return; }
   const want = Math.max(0, v.currentTime - aDelay()), dur = (isFinite(v.duration) && v.duration) || 0;
-  const ready = ext.aheadAt(want) >= 2.5 || (ext.ended && dur && ext.frontier(want) >= dur - 1);
+  const ready = ext.aheadAt(want) >= 1.2 || (ext.ended && dur && ext.frontier(want) >= dur - 1);
   if (ready) { ext.a.currentTime = want; ext.note("sound ready"); releaseSound(true); return; }
   if (ext.ended && !ext.gotThis) return;                  // the watchdog is starting it again
   if (performance.now() - soundHold.since > 30000) {
@@ -3042,7 +3042,7 @@ if (N && N.onSubData) {
   N.onSubData((id, d) => { const j = subJobs.get(id); if (j) j.data(d); });
   N.onSubEnd((id, code, msg) => { const j = subJobs.get(id); if (j) { subJobs.delete(id); j.end(code, msg); } });
 }
-function subPass(opts, onData){ return new Promise(res => { const id = ++subSeq; subJobs.set(id, { data: onData, end: (code, msg) => res({ code, msg }) }); N.subStart({ id, ...opts }); }); }
+function subPass(opts, onData, onId){ return new Promise(res => { const id = ++subSeq; if (onId) onId(id); subJobs.set(id, { data: onData, end: (code, msg) => res({ code, msg }) }); N.subStart({ id, ...opts }); }); }
 function ensureSubLoaded(e){ if (e && e.native && !e.started) loadSubNative(e); }
 // Built-in subtitles are read by the desktop app's ffmpeg. Reading starts where you are, and a jump
 // to a part that hasn't been read yet starts another reader there, so subtitles show up straight away.
@@ -3055,7 +3055,7 @@ function loadSubNative(e){
 }
 function subRunPass(e, start, dur){
   const me = cur, inp = nativeInput(); if (!inp) return;
-  const cov = { s: start, t: start, end: dur ? start + dur : Infinity, done: false };
+  const cov = { s: start, t: start, end: dur ? start + dur : Infinity, done: false, id: 0 };
   e.cover.push(cov); e.active++;
   const take = list => {
     for (const c of list) {
@@ -3078,7 +3078,7 @@ function subRunPass(e, start, dur){
       if (subs[activeSub] === e) renderCues();
     }
     if (performance.now() - lastPaint > 400) { lastPaint = performance.now(); renderMenuIfOpen(); }
-  }).then(r => {
+  }, id => { cov.id = id; }).then(r => {
     if (cur !== me) return;
     if (!pgs && rest.trim()) take(parseSrtVtt(rest + "\n\n"));
     if (r.code !== 0 && r.code !== null) e.failed = r.msg || "ffmpeg error";
@@ -3093,8 +3093,17 @@ function subRunPass(e, start, dur){
 // Called after a jump: if no reader has reached (or is about to reach) this point, start one here.
 function subEnsureAt(e, t){
   if (!e || !e.native || !e.started || e.status !== "loading" || !e.cover) return;
-  const covered = e.cover.some(c => c.s <= t + 1 && (c.done ? c.end >= t : c.t >= t - 20));
-  if (!covered && e.active < 4) subRunPass(e, Math.max(0, t - 10), 0);
+  // covered only if a reader has already reached this point (readers are paced, so one far behind won't get here in time)
+  const covered = e.cover.some(c => c.s <= t + 1 && (c.done ? c.end >= t : c.t >= t - 2));
+  if (covered) return;
+  // stop open-ended readers that are now far from where you're watching, so only one or two read the file at a time
+  for (const c of e.cover) if (!c.done && !c.killed && c.end === Infinity && c.id && Math.abs(c.t - t) > 120 && N.subStop) { N.subStop(c.id); c.end = c.t; c.killed = true; }
+  let running = e.cover.filter(c => !c.done && !c.killed);
+  if (running.length >= 3) {   // still too many: stop the one furthest from here
+    const far = running.filter(c => c.id).sort((a, b) => Math.abs(b.t - t) - Math.abs(a.t - t))[0];
+    if (far && N.subStop) { N.subStop(far.id); far.end = Math.min(far.end, far.t); far.killed = true; }
+  }
+  subRunPass(e, Math.max(0, t - 10), 0);
 }
 v.addEventListener("seeked", () => { const e = subs[activeSub]; if (e) subEnsureAt(e, v.currentTime); });
 

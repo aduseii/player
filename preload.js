@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld("craveNative", {
   onAstreamData: cb => ipcRenderer.on("astream-data", (_e, id, d) => cb(id, d)),
   onAstreamEnd: cb => ipcRenderer.on("astream-end", (_e, id, code, msg) => cb(id, code, msg)),
   subStart: opts => ipcRenderer.invoke("sub-start", opts),
+  subStop: id => ipcRenderer.invoke("sub-stop", id),
   subStopAll: () => ipcRenderer.invoke("sub-stop-all"),
   onSubData: cb => ipcRenderer.on("sub-data", (_e, id, d) => cb(id, d)),
   onSubEnd: cb => ipcRenderer.on("sub-end", (_e, id, code, msg) => cb(id, code, msg)),
