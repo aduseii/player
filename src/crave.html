@@ -806,6 +806,16 @@ html[data-theme="light"] .n-act{background:rgba(20,22,43,.07)}
 /* no tap or focus flash on mouse clicks; keyboard focus still shows a clear ring */
 button,.cb,.mi,.pill,.tab,.seek,a{-webkit-tap-highlight-color:transparent}
 :focus:not(:focus-visible){outline:none}
+/* dropdown lists: solid colours that match the mode (see-through backgrounds made them unreadable on Windows) */
+select{color-scheme:dark}
+select option,select optgroup{background:#1b1d30;color:#f5f5f7}
+select option:checked{background:#3a3d5c;color:#fff}
+html[data-theme="light"] select{color-scheme:light}
+html[data-theme="light"] select option,html[data-theme="light"] select optgroup{background:#ffffff;color:#14162b}
+html[data-theme="light"] select option:checked{background:#e3e7f5;color:#14162b}
+html[data-theme="light"] .stage:not(.is-empty) select{color-scheme:dark}
+html[data-theme="light"] .stage:not(.is-empty) select option{background:#1b1d30;color:#f5f5f7}
+html[data-theme="light"] body.po .stage.is-empty select option,html[data-theme="light"] .stage.bar-below .hud select option{background:#ffffff;color:#14162b}
 </style>
 </head>
 <body>
