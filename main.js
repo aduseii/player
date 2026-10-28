@@ -17,6 +17,11 @@ app.commandLine.appendSwitch("enable-features", "PlatformHEVCDecoderSupport");
 // Windows can hand the video to a hardware "overlay" plane that sometimes stops updating after a seek,
 // leaving a frozen picture (only frosted-glass areas kept showing the live video). Composite video normally instead.
 app.commandLine.appendSwitch("disable-direct-composition-video-overlays");
+// Use the graphics card for everything it can do, and the powerful one on laptops that have two.
+app.commandLine.appendSwitch("force_high_performance_gpu");
+app.commandLine.appendSwitch("ignore-gpu-blocklist");          // older or unusual drivers still get hardware video decoding
+app.commandLine.appendSwitch("enable-gpu-rasterization");
+app.commandLine.appendSwitch("enable-zero-copy");
 app.setAppUserModelId("app.crave.player");
 
 let win = null;
@@ -53,7 +58,7 @@ if (!app.requestSingleInstanceLock()) {
     sendOpen(openArgs(argv));
   });
   app.whenReady().then(start);
-app.whenReady().then(() => ffSupports());   // learn what the bundled ffmpeg can do, ahead of the first video
+app.whenReady().then(() => { ffSupports(); setTimeout(hwEncoder, 4000); });   // learn what the bundled ffmpeg can do, ahead of the first video
 }
 
 function start(){
@@ -323,6 +328,41 @@ ipcMain.handle("set-theme", (e, m) => {
   const w = BrowserWindow.fromWebContents(e.sender);
   if (w) w.setBackgroundColor(nativeTheme.shouldUseDarkColors ? "#0c0b14" : "#eef1f8");
 });
+/* ---------- graphics card status, and keeping the PC awake while a video plays ---------- */
+ipcMain.handle("gpu-info", async () => {
+  const st = app.getGPUFeatureStatus() || {};
+  let name = "";
+  try { const g = await app.getGPUInfo("complete"); const d = (g.gpuDevice || []).find(x => x.active) || (g.gpuDevice || [])[0]; name = (d && (d.deviceString || d.description)) || (g.auxAttributes && g.auxAttributes.glRenderer) || ""; } catch {}
+  return { decode: st.video_decode || "unknown", compositing: st.gpu_compositing || "unknown", name };
+});
+let awakeId = null;
+ipcMain.handle("keep-awake", (_e, on) => {
+  const { powerSaveBlocker } = require("electron");
+  if (on && awakeId == null) awakeId = powerSaveBlocker.start("prevent-display-sleep");
+  else if (!on && awakeId != null) { try { powerSaveBlocker.stop(awakeId); } catch {} awakeId = null; }
+});
+/* ---------- clip export on the graphics card: NVIDIA (NVENC), Intel (Quick Sync) or AMD (AMF), else the processor ---------- */
+let hwEncP = null;
+function hwEncoder(){
+  if (!hwEncP) hwEncP = (async () => {
+    if (process.env.CRAVE_HW_TEST) return process.env.CRAVE_HW_TEST;   // test hook: pretend a graphics card encoder exists
+    for (const enc of ["h264_nvenc", "h264_qsv", "h264_amf"]) {
+      const ok = await new Promise(res => {
+        const p = spawn(ffmpegPath(), ["-hide_banner", "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=black:s=640x360:r=30", "-frames:v", "5", "-c:v", enc, "-f", "null", "-"], { windowsHide: true });
+        const t = setTimeout(() => { try { p.kill(); } catch {} res(false); }, 8000);
+        p.on("error", () => { clearTimeout(t); res(false); }); p.on("close", c => { clearTimeout(t); res(c === 0); });
+      });
+      if (ok) return enc;
+    }
+    return null;
+  })();
+  return hwEncP;
+}
+const HW_ARGS = {
+  h264_nvenc: ["-c:v", "h264_nvenc", "-preset", "p5", "-tune", "hq", "-rc", "vbr", "-cq", "19", "-b:v", "0", "-pix_fmt", "yuv420p"],
+  h264_qsv: ["-c:v", "h264_qsv", "-preset", "medium", "-global_quality", "20", "-pix_fmt", "nv12"],
+  h264_amf: ["-c:v", "h264_amf", "-quality", "quality", "-rc", "cqp", "-qp_i", "18", "-qp_p", "20", "-pix_fmt", "yuv420p"]
+};
 ipcMain.handle("probe", (_e, input) => new Promise(resolve => {
   const p = spawn(ffmpegPath(), ["-hide_banner", "-nostdin", ...netIn(input), "-i", input], { windowsHide: true });
   let err = "";
@@ -426,7 +466,7 @@ function clipName(base, start, end, ext){
   return p;
 }
 // Builds the ffmpeg command for one export. Kept separate so it can be retried in a simpler form.
-function clipArgs(o, out, { copy, withSubs }){
+function clipArgs(o, out, { copy, withSubs, hw }){
   const dur = Math.max(0.1, o.end - o.start);
   const lg = o.logo && o.format !== "m4a" && fs.existsSync(logoPath(o.logo.id)) ? o.logo : null;
   // -t comes after every input so it applies to the output, not to the logo
@@ -485,6 +525,7 @@ function clipArgs(o, out, { copy, withSubs }){
     else { args.push("-map", "0:v:0"); if (vf.length) args.push("-vf", vf.join(",")); }
     if (keepHdr) args.push("-c:v", "libx265", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p10le", "-tag:v", "hvc1",
       "-x265-params", `colorprim=bt2020:transfer=${o.hdr === "HLG" ? "arib-std-b67" : "smpte2084"}:colormatrix=bt2020nc:hdr10=1:log-level=error`);
+    else if (hw && HW_ARGS[hw]) args.push(...HW_ARGS[hw]);
     else args.push("-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p");
   }
   if (audio) { args.push("-map", audio, "-c:a", "aac", "-b:a", "192k", "-ac", "2"); if (o.audioLang) args.push("-metadata:s:a:0", "language=" + o.audioLang); }
@@ -524,6 +565,8 @@ ipcMain.handle("clip-export", async (e, o) => {
   const attempts = [];
   const canCopy = o.mode === "fast" && o.format === "mp4" && !o.sub && !o.look && !o.height && !o.logo && !(o.hdr && !o.keepHdr);
   if (canCopy) attempts.push({ copy: true, withSubs: false });
+  const hw = o.format === "mp4" && !(o.hdr && o.keepHdr) ? await hwEncoder() : null;
+  if (hw) attempts.push({ copy: false, withSubs: !!o.sub, hw });          // graphics card first; the processor if it fails
   attempts.push({ copy: false, withSubs: !!o.sub });
   if (o.sub) attempts.push({ copy: false, withSubs: false, note: "Subtitles couldn't be added, so this clip has none." });
   let lastErr = null;
@@ -534,7 +577,7 @@ ipcMain.handle("clip-export", async (e, o) => {
         const size = fs.statSync(out).size;
         if (size < 1024) throw new Error("the clip came out empty");
         send(1);
-        return { path: out, size, name: path.basename(out), folder: clipDir(), note: at.note || "", fast: !!at.copy };
+        return { path: out, size, name: path.basename(out), folder: clipDir(), note: at.note || "", fast: !!at.copy, gpu: at.hw || "" };
       } catch (err) {
         lastErr = err; try { fs.unlinkSync(out); } catch {}
         if (clipCancelled) throw err;

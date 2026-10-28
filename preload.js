@@ -59,6 +59,8 @@ contextBridge.exposeInMainWorld("craveNative", {
   subsCredsSet: patch => ipcRenderer.invoke("subs-creds-set", patch),
   subsSearch: q => ipcRenderer.invoke("subs-search", q),
   subsDownload: o => ipcRenderer.invoke("subs-download", o),
+  gpuInfo: () => ipcRenderer.invoke("gpu-info"),
+  keepAwake: on => ipcRenderer.invoke("keep-awake", on),
   streamOpen: u => ipcRenderer.invoke("stream-open", u),
   streamCloseAll: () => ipcRenderer.invoke("stream-close-all"),
   streamStats: id => ipcRenderer.invoke("stream-stats", id),

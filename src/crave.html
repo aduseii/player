@@ -803,6 +803,9 @@ body.po .toasts{top:16px}
 .n-act:hover{background:rgba(255,255,255,.2)}
 html[data-theme="light"] .toast{background:rgba(255,255,255,.92);color:var(--fg);border-color:rgba(20,22,43,.08);box-shadow:0 10px 30px rgba(20,22,43,.15)}
 html[data-theme="light"] .n-act{background:rgba(20,22,43,.07)}
+/* no tap or focus flash on mouse clicks; keyboard focus still shows a clear ring */
+button,.cb,.mi,.pill,.tab,.seek,a{-webkit-tap-highlight-color:transparent}
+:focus:not(:focus-visible){outline:none}
 </style>
 </head>
 <body>
@@ -1069,6 +1072,7 @@ html[data-theme="light"] .n-act{background:rgba(20,22,43,.07)}
         <label class="switch"><input type="checkbox" id="setSaveSubs"><i></i></label></div>
       <div class="set" id="streamCacheRow" hidden><div class="d"><strong>Fast skipping on links</strong><span>Plays links through Crave's stream cache: several connections, reads ahead, keeps what it fetched. Applies to the next link you open.</span></div>
         <label class="switch"><input type="checkbox" id="setStreamCache"><i></i></label></div>
+      <div class="set" id="gpuRow" hidden><div class="d"><strong>Graphics card</strong><span id="gpuText">Checking…</span></div></div>
       <div class="set"><div class="d"><strong>Ambient glow</strong><span>Lights the space around the player with colours from the video.</span></div>
         <label class="switch"><input type="checkbox" id="setAmbient"><i></i></label></div>
       <div class="set"><div class="d"><strong>Subtitles in screenshots</strong><span>Draw the subtitle on screen into saved screenshots.</span></div>
@@ -1577,6 +1581,24 @@ for (const [id, dir] of [["#framePrev", -1], ["#frameNext", 1]]) {
 }
 document.addEventListener("keyup", e => { if (holdBy === "key" && /^[,.we]$/i.test(e.key)) stopHold(); });
 window.addEventListener("blur", stopHold);
+/* ---- no leftover highlight: buttons and sliders clicked with the mouse give up focus straight away,
+   so the focus ring never appears later and Space/arrow keys always go to the player ---- */
+document.addEventListener("pointerup", e => {
+  const el = e.target.closest && e.target.closest("button, .cb, .mi, .pill, .tab, .seek, input[type=range], input[type=checkbox], label.switch, .seg button, a");
+  if (!el) return;
+  setTimeout(() => { const a = document.activeElement; if (a && a !== document.body && !/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || (a && (a.type === "range" || a.type === "checkbox"))) a.blur(); }, 0);
+}, true);
+// keep the screen on while a video plays
+if (N && N.keepAwake) { v.addEventListener("play", () => N.keepAwake(true)); v.addEventListener("pause", () => N.keepAwake(false)); v.addEventListener("ended", () => N.keepAwake(false)); v.addEventListener("emptied", () => N.keepAwake(false)); }
+// Settings: show whether video is decoded on the graphics card
+if (N && N.gpuInfo) {
+  $("#gpuRow").hidden = false;
+  N.gpuInfo().then(g => {
+    const on = /^enabled/.test(g.decode);
+    $("#gpuText").textContent = on ? `Videos decode on your graphics card${g.name ? " (" + g.name + ")" : ""}. Clips export on it too when it supports it.`
+      : `Video decoding is running on the processor${g.name ? " (" + g.name + " found)" : ""}. Updating your graphics driver usually turns hardware decoding on.`;
+  }).catch(() => { $("#gpuText").textContent = "Couldn't read the graphics card details."; });
+}
 const togglePlay = () => { if (!cur) { $("#fileInput").click(); return; } if (v.paused) v.play().catch(() => {}); else v.pause(); osd(v.paused ? "Paused" : "▶"); };
 /* ---- smooth seeking: never stack seeks. While one is in progress only the latest target is kept and
    applied when it finishes, so rapid skips and scrubbing stay responsive instead of queueing up. ---- */
