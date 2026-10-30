@@ -1562,15 +1562,27 @@ function frameRate(){
 }
 // While stepping frames subtitles always show: each frame shows its own line, and between lines the
 // last line stays up instead of disappearing. Playing or a normal skip goes back to normal.
-var subLock = null, stepTarget = null;
+var subLock = null, stepTarget = null, lockedCues = null, lockedPgs = -1;
 // any other jump (number keys, marks, clip handles, A-B loop…) lets the subtitles follow again
 v.addEventListener("seeking", () => { if (subLock != null && (stepTarget == null || Math.abs(v.currentTime - stepTarget) > 0.002)) unlockSubs(); });
 const subTime = () => v.currentTime;
-function unlockSubs(){ if (subLock == null) return; subLock = null; renderCues(); pgsKick(); }
+function unlockSubs(){ if (subLock == null) return; subLock = null; lockedCues = null; lockedPgs = -1; renderCues(); pgsKick(); }
 function stepFrame(dir){
   if (!cur || !isFinite(v.duration)) return;
   if (!v.paused) v.pause();
-  if (subLock == null) subLock = v.currentTime;
+  if (subLock == null) {
+    // freeze the subtitle: the line showing now (or the nearest line) stays on screen and in screenshots while you step
+    subLock = v.currentTime; lockedCues = null;
+    const e = subs[activeSub];
+    if (e && e.tt) lockedCues = stickyCues(e);
+    if (e && e.pgs && e.pgs.displays) {
+      const D = e.pgs.displays, t = v.currentTime - (e.offset || 0); let i = -1;
+      for (let k = 0; k < D.length && D[k].pts <= t + 0.001; k++) i = k;
+      let j = i; while (j >= 0 && !D[j].items.length) j--;
+      if (j < 0 || !(i >= 0 && D[i].items.length)) { let n = i + 1; while (n < D.length && !D[n].items.length) n++; const prevGap = j >= 0 ? t - D[j + 1 < D.length ? j + 1 : j].pts : Infinity, nextGap = n < D.length ? D[n].pts - t : Infinity; if (nextGap < prevGap) j = n; }
+      lockedPgs = j;
+    }
+  }
   const fps = frameRate(), shown = lastFrameT != null && Math.abs(lastFrameT - v.currentTime) < 1 / fps ? lastFrameT : v.currentTime;
   const idx = Math.round(shown * fps) + dir;
   // aim a quarter-frame into the target frame so the decoder lands on it, not the one before
@@ -2977,6 +2989,7 @@ function shownCues(e, t){
   return out;
 }
 function stickyCues(e){
+  if (lockedCues && e === subs[activeSub]) return lockedCues;
   const t = subTime();
   let list = shownCues(e, t);
   if (list.length || subLock == null || !e || !e.tt || !e.tt.cues || !e.tt.cues.length) return list;
@@ -3111,7 +3124,7 @@ function drawPgs(){
   const t = subTime() - (e.offset || 0);
   let lo = 0, hi = D.length - 1, idx = -1;
   while (lo <= hi) { const m = (lo + hi) >> 1; if (D[m].pts <= t + 0.001) { idx = m; lo = m + 1; } else hi = m - 1; }
-  if (subLock != null) { let k = idx; while (k >= 0 && !D[k].items.length) k--; if (k >= 0) idx = k; }
+  if (subLock != null && lockedPgs >= 0 && lockedPgs < D.length) idx = lockedPgs;
   const W = stage.clientWidth, H = picH(), size = W + "x" + H + "x" + v.videoWidth;
   if (idx === pgsShown && size === pgsSize) return;
   pgsShown = idx; pgsSize = size;
@@ -3282,7 +3295,7 @@ async function drawSubsOnto(c){
   if (e.pgs) {
     const D = e.pgs.displays, t = subTime() - (e.offset || 0);
     let idx = -1; for (let i = 0; i < D.length && D[i].pts <= t + 0.001; i++) idx = i;
-    if (subLock != null) { while (idx >= 0 && !D[idx].items.length) idx--; }
+    if (subLock != null && lockedPgs >= 0 && lockedPgs < D.length) idx = lockedPgs;
     const d = D[idx]; if (!d || !d.items.length) return false;
     const sx = W / d.w, sy = H / d.h;
     ctx.imageSmoothingQuality = "high";
