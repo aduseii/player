@@ -1560,14 +1560,22 @@ function frameRate(){
   if (measuredFps > 5) return known.reduce((a, b) => Math.abs(b - measuredFps) < Math.abs(a - measuredFps) ? b : a);
   return 24;
 }
+// While stepping frames the subtitles stay on the line that was showing (only the picture moves),
+// so you can pick the exact frame for a line. Playing or a normal skip lets them follow again.
+var subLock = null, stepTarget = null;
+// any other jump (number keys, marks, clip handles, A-B loop…) lets the subtitles follow again
+v.addEventListener("seeking", () => { if (subLock != null && (stepTarget == null || Math.abs(v.currentTime - stepTarget) > 0.002)) unlockSubs(); });
+const subTime = () => subLock != null ? subLock : v.currentTime;
+function unlockSubs(){ if (subLock == null) return; subLock = null; renderCues(); pgsKick(); }
 function stepFrame(dir){
   if (!cur || !isFinite(v.duration)) return;
   if (!v.paused) v.pause();
+  if (subLock == null) subLock = v.currentTime;
   const fps = frameRate(), shown = lastFrameT != null && Math.abs(lastFrameT - v.currentTime) < 1 / fps ? lastFrameT : v.currentTime;
   const idx = Math.round(shown * fps) + dir;
   // aim a quarter-frame into the target frame so the decoder lands on it, not the one before
   const t = Math.max(0, Math.min(v.duration - 0.001, (idx + 0.25) / fps));
-  v.currentTime = t; lastFrameT = idx / fps;
+  stepTarget = t; v.currentTime = t; lastFrameT = idx / fps;
   const ms = Math.round(Math.max(0, idx) / fps * 1000), tc = fmt(Math.floor(ms / 1000)) + "." + String(ms % 1000).padStart(3, "0");
   osd((dir > 0 ? "Next frame" : "Previous frame") + " · " + tc + " · frame " + Math.max(0, idx).toLocaleString());
 }
@@ -1618,6 +1626,7 @@ const togglePlay = () => { if (!cur) { $("#fileInput").click(); return; } if (v.
 var seekTarget = null;   // var: read by renderTime, which can run before this line
 function seekTo(t){
   if (!isFinite(v.duration)) return;
+  unlockSubs();
   t = Math.max(0, Math.min(v.duration - .05, t));
   seekTarget = t; renderTime();
   if (!v.seeking) v.currentTime = t;
@@ -2881,7 +2890,7 @@ function releaseSound(play){
   soundHold = null; $("#stage").classList.remove("sound-wait"); $("#spinner").hidden = true;
   if (play) v.play().catch(() => {});
 }
-v.addEventListener("play", () => { if (soundHold) releaseSound(false); });
+v.addEventListener("play", () => { if (soundHold) releaseSound(false); unlockSubs(); });
 setInterval(() => {
   if (!soundHold) return;
   if (!ext || !ext.live || !cur || cur.id !== soundHold.id) { releaseSound(false); return; }
@@ -2956,7 +2965,7 @@ function cueSegments(c){
 // What to show at time t (shared by the screen, screenshots and clips)
 function shownCues(e, t){
   if (!e || !e.tt || !e.tt.activeCues) return [];
-  const act = [...e.tt.activeCues].sort((a, b) => a.startTime - b.startTime);
+  const act = (subLock != null ? [...(e.tt.cues || [])].filter(c => c.startTime <= t && c.endTime > t) : [...e.tt.activeCues]).sort((a, b) => a.startTime - b.startTime);
   if (!S.oneLiner) return act.map(c => ({ text: c.text, top: c.top }));
   const out = [];
   for (const top of [false, true]) {
@@ -2970,7 +2979,7 @@ function renderCues(){
   const e = subs[activeSub];
   let bottom = "", top = "";
   if (e && e.tt && e.tt.activeCues) {
-    for (const c of shownCues(e, v.currentTime)) {
+    for (const c of shownCues(e, subTime())) {
       const h = `<div class="sub-line"><span class="sub-t">${cueHTML(c.text)}</span></div>`;
       if (c.top) top += h; else bottom += h;
     }
@@ -3086,7 +3095,7 @@ function clearPgs(){ const ctx = pgsCanvas.getContext("2d"); ctx.setTransform(1,
 function drawPgs(){
   const e = subs[activeSub], D = e && e.pgs && e.pgs.displays;
   if (!D) { if (pgsShown !== -1) { clearPgs(); pgsShown = -1; } return; }
-  const t = v.currentTime - (e.offset || 0);
+  const t = subTime() - (e.offset || 0);
   let lo = 0, hi = D.length - 1, idx = -1;
   while (lo <= hi) { const m = (lo + hi) >> 1; if (D[m].pts <= t + 0.001) { idx = m; lo = m + 1; } else hi = m - 1; }
   const W = stage.clientWidth, H = picH(), size = W + "x" + H + "x" + v.videoWidth;
@@ -3257,7 +3266,7 @@ async function drawSubsOnto(c){
   const e = subs[activeSub]; if (!e) return false;
   const ctx = c.getContext("2d"), W = c.width, H = c.height;
   if (e.pgs) {
-    const D = e.pgs.displays, t = v.currentTime - (e.offset || 0);
+    const D = e.pgs.displays, t = subTime() - (e.offset || 0);
     let idx = -1; for (let i = 0; i < D.length && D[i].pts <= t + 0.001; i++) idx = i;
     const d = D[idx]; if (!d || !d.items.length) return false;
     const sx = W / d.w, sy = H / d.h;
@@ -3299,7 +3308,7 @@ async function drawSubsOnto(c){
     return out;
   };
   const groups = { bottom: [], top: [] };
-  for (const cue of shownCues(e, v.currentTime)) groups[cue.top ? "top" : "bottom"].push(...toLines(cue.text));
+  for (const cue of shownCues(e, subTime())) groups[cue.top ? "top" : "bottom"].push(...toLines(cue.text));
   const lh = px * 1.22, padX = px * 0.3, padY = px * 0.04, a = st.bgOpacity / 100;
   const drawBlock = (lines, topY) => {
     if (!lines.length) return;
