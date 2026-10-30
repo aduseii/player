@@ -3000,8 +3000,8 @@ function renderCues(){
   if (subsBottom.innerHTML !== bottom) subsBottom.innerHTML = bottom;
   if (subsTop.innerHTML !== top) subsTop.innerHTML = top;
 }
-v.addEventListener("timeupdate", () => { if (S.oneLiner && activeSub >= 0) renderCues(); });
-v.addEventListener("seeked", () => { if (S.oneLiner && activeSub >= 0) renderCues(); });
+v.addEventListener("timeupdate", () => { if ((S.oneLiner || subLock != null) && activeSub >= 0) renderCues(); });
+v.addEventListener("seeked", () => { if ((S.oneLiner || subLock != null) && activeSub >= 0) { renderCues(); pgsKick(); } });
 function setOneLiner(on){ S.oneLiner = on; saveSettings(); renderCues(); renderMenuIfOpen(); const el = $("#setOneLiner"); if (el) el.checked = on; osd(on ? "One-liner on" : "One-liner off"); }
 function bindCueTrack(e){
   if (cueTrack) cueTrack.oncuechange = null;
@@ -3290,7 +3290,8 @@ async function drawSubsOnto(c){
     for (const it of d.items) ctx.drawImage(pgsBitmap(it), it.x * sx, it.y * sy + dy, it.w * sx, it.h * sy);
     return true;
   }
-  if (!e.tt || !e.tt.activeCues || !e.tt.activeCues.length) return false;
+  // draw exactly what's on screen (including the line kept up while stepping frames)
+  if (!e.tt || !stickyCues(e).length) return false;
   const st = subSt(), px = Math.max(14, Math.round(H * 0.052 * (SUB_SCALE[S.subSize] || 1)));
   const family = getComputedStyle(document.documentElement).getPropertyValue("--sub-font").trim() || "sans-serif";
   const fontFor = r => `${r.i ? "italic " : ""}${r.b ? 700 : 500} ${px}px ${family}`;
