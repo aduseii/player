@@ -1560,12 +1560,12 @@ function frameRate(){
   if (measuredFps > 5) return known.reduce((a, b) => Math.abs(b - measuredFps) < Math.abs(a - measuredFps) ? b : a);
   return 24;
 }
-// While stepping frames the subtitles stay on the line that was showing (only the picture moves),
-// so you can pick the exact frame for a line. Playing or a normal skip lets them follow again.
+// While stepping frames subtitles always show: each frame shows its own line, and between lines the
+// last line stays up instead of disappearing. Playing or a normal skip goes back to normal.
 var subLock = null, stepTarget = null;
 // any other jump (number keys, marks, clip handles, A-B loop…) lets the subtitles follow again
 v.addEventListener("seeking", () => { if (subLock != null && (stepTarget == null || Math.abs(v.currentTime - stepTarget) > 0.002)) unlockSubs(); });
-const subTime = () => subLock != null ? subLock : v.currentTime;
+const subTime = () => v.currentTime;
 function unlockSubs(){ if (subLock == null) return; subLock = null; renderCues(); pgsKick(); }
 function stepFrame(dir){
   if (!cur || !isFinite(v.duration)) return;
@@ -2535,12 +2535,13 @@ function retime(e){
 }
 function pushCue(e, start, end, text, top){
   if (e.lastOpen) { const p = e.lastOpen; p._e = Math.max(p._s + .5, Math.min(p._s + 6, start)); p.endTime = cueT(e, p._e); e.lastOpen = null; }
-  if (end == null || end <= start) end = start + 4;
+  const open = end == null || end <= start;   // no end time given: show 4 s, or until the next line starts
+  if (open) end = start + 4;
   try {
     const c = new VTTCue(cueT(e, start), cueT(e, end), text); c._s = start; c._e = end;
     if (top) { c.line = 0; c.top = true; }
     e.tt.addCue(c); e.count++;
-    if (end === start + 4) e.lastOpen = c;
+    if (open) e.lastOpen = c;
   } catch {}
 }
 function resetSubs(){
@@ -2975,11 +2976,23 @@ function shownCues(e, t){
   }
   return out;
 }
+function stickyCues(e){
+  const t = subTime();
+  let list = shownCues(e, t);
+  if (list.length || subLock == null || !e || !e.tt || !e.tt.cues || !e.tt.cues.length) return list;
+  // stepping through a gap: show the line closest in time (the one just finished or the one about to start)
+  let best = null, gap = Infinity;
+  for (const c of e.tt.cues) { const d = t < c.startTime ? c.startTime - t : t >= c.endTime ? t - c.endTime : 0; if (d < gap) { gap = d; best = c; } }
+  if (!best) return list;
+  const at = t < best.startTime ? best.startTime + 0.001 : best.endTime - 0.001;
+  const saved = subLock; subLock = at; list = shownCues(e, at); subLock = saved;   // read the cues at that moment
+  return list;
+}
 function renderCues(){
   const e = subs[activeSub];
   let bottom = "", top = "";
   if (e && e.tt && e.tt.activeCues) {
-    for (const c of shownCues(e, subTime())) {
+    for (const c of stickyCues(e)) {
       const h = `<div class="sub-line"><span class="sub-t">${cueHTML(c.text)}</span></div>`;
       if (c.top) top += h; else bottom += h;
     }
@@ -3098,6 +3111,7 @@ function drawPgs(){
   const t = subTime() - (e.offset || 0);
   let lo = 0, hi = D.length - 1, idx = -1;
   while (lo <= hi) { const m = (lo + hi) >> 1; if (D[m].pts <= t + 0.001) { idx = m; lo = m + 1; } else hi = m - 1; }
+  if (subLock != null) { let k = idx; while (k >= 0 && !D[k].items.length) k--; if (k >= 0) idx = k; }
   const W = stage.clientWidth, H = picH(), size = W + "x" + H + "x" + v.videoWidth;
   if (idx === pgsShown && size === pgsSize) return;
   pgsShown = idx; pgsSize = size;
@@ -3268,6 +3282,7 @@ async function drawSubsOnto(c){
   if (e.pgs) {
     const D = e.pgs.displays, t = subTime() - (e.offset || 0);
     let idx = -1; for (let i = 0; i < D.length && D[i].pts <= t + 0.001; i++) idx = i;
+    if (subLock != null) { while (idx >= 0 && !D[idx].items.length) idx--; }
     const d = D[idx]; if (!d || !d.items.length) return false;
     const sx = W / d.w, sy = H / d.h;
     ctx.imageSmoothingQuality = "high";
@@ -3308,7 +3323,7 @@ async function drawSubsOnto(c){
     return out;
   };
   const groups = { bottom: [], top: [] };
-  for (const cue of shownCues(e, subTime())) groups[cue.top ? "top" : "bottom"].push(...toLines(cue.text));
+  for (const cue of stickyCues(e)) groups[cue.top ? "top" : "bottom"].push(...toLines(cue.text));
   const lh = px * 1.22, padX = px * 0.3, padY = px * 0.04, a = st.bgOpacity / 100;
   const drawBlock = (lines, topY) => {
     if (!lines.length) return;
