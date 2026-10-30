@@ -1087,6 +1087,8 @@ html[data-theme="light"] body.po .stage.is-empty select option,html[data-theme="
         <label class="switch"><input type="checkbox" id="setAmbient"><i></i></label></div>
       <div class="set"><div class="d"><strong>Subtitles in screenshots</strong><span>Draw the subtitle on screen into saved screenshots.</span></div>
         <label class="switch"><input type="checkbox" id="setShotSubs"><i></i></label></div>
+      <div class="set"><div class="d"><strong>One-liner</strong><span>Subtitles show one line at a time: two speakers in one subtitle get a line each, in turn. Also applies to screenshots and clips. Shortcut: T.</span></div>
+        <label class="switch"><input type="checkbox" id="setOneLiner"><i></i></label></div>
       <div class="set"><div class="d"><strong>Subtitle font</strong><span id="subFontText">Checking for Netflix Sans…</span></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" id="subFontBtn">Add font file…</button><button class="btn sm ghost" id="subFontReset" hidden>Reset</button></div>
         <input type="file" id="subFontInput" accept=".ttf,.otf,.woff,.woff2" hidden></div>
@@ -1136,6 +1138,7 @@ html[data-theme="light"] body.po .stage.is-empty select option,html[data-theme="
     <kbd>S</kbd><span>Screenshot</span>
     <kbd>A</kbd><span>Set loop start, end, then clear</span>
     <kbd>C</kbd><span>Subtitles on / off</span>
+    <kbd>T</kbd><span>One-liner: one subtitle line at a time</span>
     <kbd>V</kbd><span>Next subtitle track</span>
     <kbd>G H</kbd><span>Subtitles earlier / later by 0.1 s</span>
     <kbd>M</kbd><span>Mute</span>
@@ -1191,7 +1194,7 @@ const store = {
   get(k, d){ try { const x = localStorage.getItem("crave:" + k); return x == null ? d : JSON.parse(x); } catch { return d; } },
   set(k, val){ try { localStorage.setItem("crave:" + k, JSON.stringify(val)); } catch {} }
 };
-const DEF = { wm:{ pos:"tl", size:12, opacity:100, margin:3, preview:true, last:null }, audio:{ decoder:"auto", surround:false, night:false, dialogue:false }, theme:"dark", ctrlLayout:"below", streamCache:true, ambient:true, subPos:7, sidecarSubs:true, saveSubs:true, subLang:"en", shotSubs:true, subStyle:{ color:"#ffffff", edge:"shadow", bg:"none", bgColor:"#000000", bgOpacity:60 }, hdr:"off", subSize:"medium", autoSubs:true, skip:10, speed:1, fmt:"image/png", autoDl:false, resume:true, autoNext:true, stats:true, volume:1, muted:false };
+const DEF = { wm:{ pos:"tl", size:12, opacity:100, margin:3, preview:true, last:null }, audio:{ decoder:"auto", surround:false, night:false, dialogue:false }, theme:"dark", ctrlLayout:"below", streamCache:true, ambient:true, subPos:7, oneLiner:false, sidecarSubs:true, saveSubs:true, subLang:"en", shotSubs:true, subStyle:{ color:"#ffffff", edge:"shadow", bg:"none", bgColor:"#000000", bgOpacity:60 }, hdr:"off", subSize:"medium", autoSubs:true, skip:10, speed:1, fmt:"image/png", autoDl:false, resume:true, autoNext:true, stats:true, volume:1, muted:false };
 const S = Object.assign({}, DEF, store.get("settings", {}));
 const saveSettings = () => store.set("settings", S);
 // Appearance: light, dark, or follow Windows. Set before anything draws so there is no flash.
@@ -2042,7 +2045,7 @@ function bindSettings(){
   const sel = (id, key, num) => { const el = $(id); el.value = String(S[key]); el.onchange = () => { S[key] = num ? +el.value : el.value; saveSettings(); renderSkipLabels(); }; };
   const sw = (id, key, after) => { const el = $(id); el.checked = !!S[key]; el.onchange = () => { S[key] = el.checked; saveSettings(); after && after(); }; };
   sel("#setSkip", "skip", true); sel("#setSpeed", "speed", true); sel("#setFmt", "fmt");
-  sw("#setAutoDl", "autoDl"); sw("#setShotSubs", "shotSubs"); sw("#setAmbient", "ambient", () => ambient()); sw("#setStreamCache", "streamCache"); $("#streamCacheRow").hidden = !(N && N.streamOpen); sw("#setSidecar", "sidecarSubs"); sw("#setSaveSubs", "saveSubs"); sw("#setResume", "resume"); sw("#setAutoSubs", "autoSubs"); sw("#setAutoNext", "autoNext"); sw("#setStats", "stats", () => { if (cur && cur.torrent) renderStats(); });
+  sw("#setAutoDl", "autoDl"); sw("#setShotSubs", "shotSubs"); sw("#setOneLiner", "oneLiner", () => { renderCues(); renderMenuIfOpen(); }); sw("#setAmbient", "ambient", () => ambient()); sw("#setStreamCache", "streamCache"); $("#streamCacheRow").hidden = !(N && N.streamOpen); sw("#setSidecar", "sidecarSubs"); sw("#setSaveSubs", "saveSubs"); sw("#setResume", "resume"); sw("#setAutoSubs", "autoSubs"); sw("#setAutoNext", "autoNext"); sw("#setStats", "stats", () => { if (cur && cur.torrent) renderStats(); });
 }
 
 /* ---------------- input: link bar, files, drop, paste ---------------- */
@@ -2132,6 +2135,7 @@ document.addEventListener("keydown", e => {
     case "=": nudgeDelay(50); break;
     case "a": cycleAB(); break;
     case "c": toggleSubs(); break;
+    case "t": setOneLiner(!S.oneLiner); break;
     case "v": cycleSub(); break;
     case "g": shiftSub(-0.1); break;
     case "h": shiftSub(0.1); break;
@@ -2931,11 +2935,42 @@ function cueHTML(t){
   const raw = String(t).replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
   return esc(raw).replace(/&lt;(\/?)([ibu])&gt;/g, "<$1$2>").replace(/\n/g, "<br>");
 }
+/* ---- One-liner: one subtitle line at a time ----
+   A cue with two speakers ("- Where were you?" / "- Out.") is split into one line per speaker, each shown
+   for its share of the cue's time; a sentence wrapped over two lines is joined into one; and when cues
+   overlap only the newest shows. Handy for screenshots that make clear who said what. */
+const DASH = /^\s*(?:<[ibu]>\s*)*[-‐‑–—]\s*/;
+function cueSegments(c){
+  const raw = String(c.text).replace(/\r/g, "").split("\n").map(l => l.trim()).filter(Boolean);
+  const plain = l => l.replace(/<[^>]+>/g, "");
+  if (raw.length >= 2 && raw.filter(l => DASH.test(plain(l))).length >= 2) {
+    // speaker lines: a line without a dash continues the previous speaker
+    const parts = [];
+    for (const l of raw) { if (DASH.test(plain(l)) || !parts.length) parts.push(l.replace(/^(\s*(?:<[ibu]>\s*)*)[-‐‑–—]\s*/, "$1")); else parts[parts.length - 1] += " " + l; }
+    const len = parts.map(p => Math.max(8, plain(p).length)), total = len.reduce((x, y) => x + y, 0), dur = c.endTime - c.startTime;
+    let t = c.startTime;
+    return parts.map((text, i) => { const s = t; t = i === parts.length - 1 ? c.endTime : t + dur * len[i] / total; return { s, e: t, text, top: c.top }; });
+  }
+  return [{ s: c.startTime, e: c.endTime, text: raw.join(" "), top: c.top }];
+}
+// What to show at time t (shared by the screen, screenshots and clips)
+function shownCues(e, t){
+  if (!e || !e.tt || !e.tt.activeCues) return [];
+  const act = [...e.tt.activeCues].sort((a, b) => a.startTime - b.startTime);
+  if (!S.oneLiner) return act.map(c => ({ text: c.text, top: c.top }));
+  const out = [];
+  for (const top of [false, true]) {
+    const list = act.filter(c => !!c.top === top); if (!list.length) continue;
+    const segs = cueSegments(list[list.length - 1]);
+    out.push(segs.find(g => t >= g.s && t < g.e) || segs[t < segs[0].s ? 0 : segs.length - 1]);
+  }
+  return out;
+}
 function renderCues(){
   const e = subs[activeSub];
   let bottom = "", top = "";
   if (e && e.tt && e.tt.activeCues) {
-    for (const c of [...e.tt.activeCues].sort((a, b) => a.startTime - b.startTime)) {
+    for (const c of shownCues(e, v.currentTime)) {
       const h = `<div class="sub-line"><span class="sub-t">${cueHTML(c.text)}</span></div>`;
       if (c.top) top += h; else bottom += h;
     }
@@ -2943,6 +2978,9 @@ function renderCues(){
   if (subsBottom.innerHTML !== bottom) subsBottom.innerHTML = bottom;
   if (subsTop.innerHTML !== top) subsTop.innerHTML = top;
 }
+v.addEventListener("timeupdate", () => { if (S.oneLiner && activeSub >= 0) renderCues(); });
+v.addEventListener("seeked", () => { if (S.oneLiner && activeSub >= 0) renderCues(); });
+function setOneLiner(on){ S.oneLiner = on; saveSettings(); renderCues(); renderMenuIfOpen(); const el = $("#setOneLiner"); if (el) el.checked = on; osd(on ? "One-liner on" : "One-liner off"); }
 function bindCueTrack(e){
   if (cueTrack) cueTrack.oncuechange = null;
   cueTrack = e && e.tt ? e.tt : null;
@@ -3261,7 +3299,7 @@ async function drawSubsOnto(c){
     return out;
   };
   const groups = { bottom: [], top: [] };
-  for (const cue of [...e.tt.activeCues].sort((a, b) => a.startTime - b.startTime)) groups[cue.top ? "top" : "bottom"].push(...toLines(cue.text));
+  for (const cue of shownCues(e, v.currentTime)) groups[cue.top ? "top" : "bottom"].push(...toLines(cue.text));
   const lh = px * 1.22, padX = px * 0.3, padY = px * 0.04, a = st.bgOpacity / 100;
   const drawBlock = (lines, topY) => {
     if (!lines.length) return;
@@ -3764,7 +3802,12 @@ function togglePreview(){
 }
 v.addEventListener("timeupdate", () => { if (clip.on && clip.previewing && v.currentTime >= clip.b) { v.currentTime = clip.a; } });
 function clipSrt(e, a, b){
-  const cues = e && e.tt && e.tt.cues ? [...e.tt.cues] : [];
+  let cues = e && e.tt && e.tt.cues ? [...e.tt.cues].sort((x, y) => x.startTime - y.startTime) : [];
+  if (S.oneLiner) {   // the same one-line-at-a-time timing as on screen
+    const segs = cues.flatMap(c => cueSegments(c).map(g => ({ startTime: g.s, endTime: g.e, text: g.text, top: g.top })));
+    for (const top of [false, true]) { const l = segs.filter(g => !!g.top === top); for (let i = 0; i < l.length - 1; i++) if (l[i].endTime > l[i + 1].startTime) l[i].endTime = l[i + 1].startTime; }
+    cues = segs.filter(g => g.endTime - g.startTime > 0.05);
+  }
   const ts = t => { t = Math.max(0, t); const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = Math.floor(t % 60), ms = Math.round((t % 1) * 1000) % 1000; return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")},${String(ms).padStart(3, "0")}`; };
   let n = 0, out = "";
   for (const c of cues.sort((x, y) => x.startTime - y.startTime)) {
@@ -4128,12 +4171,13 @@ function renderMenu(){
       h += `<button class="mi" data-sub="${i}" ${usable(s) ? "" : "disabled"}>${ck(i === activeSub)}<span><span class="a">${esc(s.label)}</span><span class="b">${esc(st)}</span></span></button>`;
     });
     if (!subs.length) h += `<p class="note">${cur && cur.probing ? "Checking this file for built-in subtitles…" : cur && cur.kind === "file" ? "This file has no built-in subtitles." : "Built-in subtitles are read from files on your computer. For links, load a subtitle file."}</p>`;
-    h += `<div class="sep"></div>${N && N.subsSearch ? `<button class="mi" data-act="search">${ck(false)}<span><span class="a">Search online…</span><span class="b">OpenSubtitles.com and SubDL</span></span></button>` : ""}<button class="mi" data-act="style">${ck(false)}<span><span class="a">Subtitle style…</span><span class="b">Colour, background, opacity, size</span></span></button><button class="mi" data-act="load">${ck(false)}<span><span class="a">Load subtitle file…</span><span class="b">.srt, .vtt, .ass or .ssa</span></span></button>`;
+    h += `<div class="sep"></div>${N && N.subsSearch ? `<button class="mi" data-act="search">${ck(false)}<span><span class="a">Search online…</span><span class="b">OpenSubtitles.com and SubDL</span></span></button>` : ""}<button class="mi" data-act="oneliner">${ck(!!S.oneLiner)}<span><span class="a">One-liner</span><span class="b">One line at a time, one speaker each (T)</span></span></button><button class="mi" data-act="style">${ck(false)}<span><span class="a">Subtitle style…</span><span class="b">Colour, background, opacity, size</span></span></button><button class="mi" data-act="load">${ck(false)}<span><span class="a">Load subtitle file…</span><span class="b">.srt, .vtt, .ass or .ssa</span></span></button>`;
     if (activeSub >= 0) h += `<div class="delay"><span style="flex:1">Timing <span class="mono" style="color:var(--honey)">${fmtOff(subs[activeSub].offset)}</span></span><button class="btn sm" data-d="-0.5">Earlier</button><button class="btn sm" data-d="0.5">Later</button></div>${N && N.subsSync && subs[activeSub].tt ? `<button class="mi" data-act="sync" ${syncing ? "disabled" : ""}>${ck(false)}<span><span class="a">${syncing ? "Syncing…" : "Sync to speech"}</span><span class="b">Lines the subtitles up with the dialogue automatically</span></span></button>` : ""}<p class="note" style="padding-top:0">G and H nudge by 0.1 s.</p>`;
     m.innerHTML = h;
     m.querySelectorAll("[data-sub]").forEach(b => b.onclick = () => selectSub(+b.dataset.sub));
     m.querySelector('[data-act="load"]').onclick = () => { closeMenu(); $("#subInput").click(); };
     const sb = m.querySelector('[data-act="search"]'); if (sb) sb.onclick = () => { closeMenu(); openSubSearch(); };
+    m.querySelector('[data-act="oneliner"]').onclick = () => setOneLiner(!S.oneLiner);
     m.querySelector('[data-act="style"]').onclick = () => { closeMenu(); if (!v.paused) v.pause(); switchView("settings"); $("#subStyleCard").scrollIntoView({ behavior: "smooth", block: "start" }); };
     m.querySelectorAll("[data-d]").forEach(b => b.onclick = () => shiftSub(+b.dataset.d));
     const sy = m.querySelector('[data-act="sync"]'); if (sy) sy.onclick = () => syncSub();
