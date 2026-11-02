@@ -486,6 +486,8 @@ function clipArgs(o, out, { copy, withSubs, hw }){
     const hex = c => /^#?[0-9a-f]{6}$/i.test(c || "") ? c.replace("#", "") : "ffffff";
     const alpha = op => Math.round((1 - Math.max(0, Math.min(100, op == null ? 60 : op)) / 100) * 255).toString(16).padStart(2, "0").toUpperCase();
     const style = [`FontName=${st.font || "Arial"}`, `FontSize=${st.size || 16}`, `PrimaryColour=${assColour(hex(st.color))}`, `MarginV=${Math.round(288 * (st.pos != null ? st.pos : 7) / 100)}`];
+    // shots mode: keep the text inside the middle 4:5 of the frame (subtitle files are laid out on a 384-wide canvas)
+    if (st.shots > 0 && st.shots < 1) { const m = Math.round(384 * (1 - st.shots) / 2); style.push(`MarginL=${m}`, `MarginR=${m}`); }
     if (st.bg === "line" || st.bg === "block" || st.bg === "band") {
       // libass draws the box in the outline colour; its alpha is inverted (00 = solid)
       style.push("BorderStyle=3", `OutlineColour=&H${alpha(st.bgOpacity)}${assColour(hex(st.bgColor)).slice(4)}`, "Outline=1.6", "Shadow=0");
