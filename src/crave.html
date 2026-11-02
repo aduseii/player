@@ -999,6 +999,8 @@ html[data-theme="light"] .home-hero:not(.welcome){--panel:#17181b;--fg:#eceef2;-
 html[data-theme="light"] .home-hero:not(.welcome) .btn{background:rgba(255,255,255,.14);color:#eceef2}
 html[data-theme="light"] .home-hero:not(.welcome) .btn.primary{background:#eceef2;color:#0e0f11}
 .hcard .th i{background:#fff!important;box-shadow:0 0 4px rgba(0,0,0,.5)}
+#homeBtn svg.i{width:21px;height:21px}
+button.brand{border:0;background:none;padding:0;cursor:pointer;color:inherit}
 </style>
 </head>
 <body>
@@ -1035,8 +1037,9 @@ html[data-theme="light"] .home-hero:not(.welcome) .btn.primary{background:#eceef
 </svg>
 
 <header class="top">
-  <div class="brand" aria-label="Crave">Crave<b>.</b></div>
+  <button class="brand" id="brandHome" title="Back to Home" aria-label="Crave: back to Home">Crave<b>.</b></button>
   <nav class="tabs" role="tablist" aria-label="Sections">
+    <button class="tab home-tab" id="homeTab" title="Back to Home">Home</button>
     <button class="tab" role="tab" data-view="board" aria-selected="true">Watch</button>
     <button class="tab" role="tab" data-view="library" aria-selected="false">Library <span class="count" id="libCount">0</span></button>
     <button class="tab" role="tab" data-view="shots" aria-selected="false">Shots <span class="count" id="shotCount">0</span></button>
@@ -1132,6 +1135,7 @@ html[data-theme="light"] .home-hero:not(.welcome) .btn.primary{background:#eceef
               <button class="time end" id="timeEnd" title="Switch between length and time left">0:00</button>
             </div>
             <div class="ctrls">
+              <button class="cb" id="homeBtn" title="Home" aria-label="Back to Home"><svg class="i" viewBox="0 0 24 24"><path d="M3.5 11 12 4l8.5 7"/><path d="M5.5 9.5V20h5v-6h3v6h5V9.5"/></svg></button>
               <button class="cb app-btn" id="appBtn" title="Library, Shots, Settings and more" aria-label="Show library, shots and settings"><svg class="i" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.6"/></svg></button>
               <button class="cb big" id="playBtn" title="Play (Space)"><svg class="i"><use href="#i-play"/></svg></button>
               <button class="cb num" id="backBtn" title="Back (J)"><svg class="i"><use href="#i-back"/></svg><span class="lbl" id="backLbl">10</span></button>
@@ -1896,6 +1900,7 @@ function setPlayerMode(on){
   $("#appBtn").setAttribute("aria-pressed", String(!on));
   $("#appBtn").title = on ? "Library, Shots, Settings and more" : "Back to just the player";
   if (on && $("#view-board").hidden) switchView("board");
+  if (on) try { renderHome(true); } catch {}
   requestAnimationFrame(() => { try { fitChrome(); fitStage(); applyCtrlLayout(); sizeSubs(); renderWm(); ambient(); } catch {} });
 }
 $("#appBtn").onclick = () => setPlayerMode(!document.body.classList.contains("po"));
@@ -2279,7 +2284,17 @@ function switchView(name){
   if (name === "shots") { renderShots(); renderClips(); }
   try { history.replaceState(null, "", "#" + name); } catch {}
 }
-$$(".tab").forEach(t => t.onclick = () => switchView(t.dataset.view));
+$$(".tab[data-view]").forEach(t => t.onclick = () => switchView(t.dataset.view));
+// Home: leave the video (its place is saved, so it shows under Continue watching) and show the Home screen
+function goHome(){
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  if (cur) stop();
+  if (!document.body.classList.contains("po")) setPlayerMode(true);
+  try { renderHome(true); $(".home").scrollTop = 0; } catch {}
+}
+$("#homeTab").onclick = goHome;
+$("#brandHome").onclick = goHome;
+$("#homeBtn").onclick = goHome;
 
 /* ---------------- settings ---------------- */
 function bindSettings(){
@@ -4721,7 +4736,8 @@ $("#homeForm").onsubmit = e => {
   if (looksLikeLink(q)) { urlInput.value = q; $("#linkForm").requestSubmit(); $("#homeQ").value = ""; return; }
   const first = $("#homeRecentRow .hcard"); if (first) first.click();
 };
-try { new MutationObserver(() => { if (stage.classList.contains("is-empty")) renderHome(true); }).observe(stage, { attributes: true, attributeFilter: ["class"] }); } catch {}
+let wasEmpty = stage.classList.contains("is-empty");
+try { new MutationObserver(() => { const e = stage.classList.contains("is-empty"); if (e && !wasEmpty) renderHome(true); wasEmpty = e; }).observe(stage, { attributes: true, attributeFilter: ["class"] }); } catch {}
 
 /* ---------------- Shot board (beside the player) ---------------- */
 let boardUrls = [];
