@@ -22,9 +22,7 @@ const fontSets = [
   ["@fontsource-variable/bricolage-grotesque", ["opsz.css"], [["Bricolage Grotesque Variable", "Bricolage Grotesque"]]],
   ["@fontsource/figtree", ["400.css", "500.css", "600.css"], []],
   ["@fontsource/jetbrains-mono", ["400.css", "500.css"], []],
-  ["@fontsource-variable/inter", ["index.css"], [["Inter Variable", "Inter"]]],
-  ["@fontsource-variable/archivo", ["wdth.css"], [["Archivo Variable", "Archivo"]]],
-  ["@fontsource-variable/fraunces", ["full.css", "full-italic.css"], [["Fraunces Variable", "Fraunces"]]]
+  ["@fontsource-variable/inter", ["index.css"], [["Inter Variable", "Inter"]]]
 ];
 let css = "";
 for (const [pkg, files, renames] of fontSets) {
