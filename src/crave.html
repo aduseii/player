@@ -11,7 +11,7 @@
 <title>Crave</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Inter:wght@400..700&family=Archivo:wdth,wght@62..125,400..800&family=Fraunces:ital,opsz,wght,SOFT@0,9..144,300..800,0..100;1,9..144,300..800,0..100&display=swap">
 <style>
 /* Layout: a screening-room board — the stage dominates, a slim rail beside it holds queue, marks and source info. */
 :root{
@@ -830,6 +830,245 @@ html[data-theme="light"] body.po .stage.is-empty select option,html[data-theme="
 .shots-guide i[data-c="br"]{right:-3px;bottom:-3px;border-left:0;border-top:0;cursor:nwse-resize}
 /* no big play button over the picture when paused (the control bar has play) */
 .bigplay{display:none!important}
+/* ================================================================
+   Settings: one section at a time, picked from the list on the left.
+   ================================================================ */
+:root .settings.sx{display:grid;grid-template-columns:184px minmax(0,1fr);gap:36px;max-width:1000px;background:none;border:0;border-radius:0;overflow:visible;backdrop-filter:none;box-shadow:none;align-items:start}
+.snav{position:sticky;top:calc(var(--chrome-h,72px) + 12px);display:flex;flex-direction:column;gap:2px}
+.snav button{border:0;background:transparent;text-align:left;cursor:pointer;padding:8px 12px;border-radius:9px;font:500 14px var(--f-ui);color:var(--muted)}
+.snav button:hover{color:var(--fg);background:var(--panel-2)}
+.snav button[aria-selected="true"]{color:var(--fg);background:var(--panel-3);font-weight:600}
+.spane h2{font:700 24px/1.15 var(--f-head);letter-spacing:-.02em;margin:4px 0 20px}
+.sblock{margin-bottom:28px}
+.sblock h3{font:600 13px/1.3 var(--f-ui);color:var(--muted);margin:0 0 8px 2px}
+.sblock:not(:has(.set:not([hidden]))){display:none}
+.sgroup{background:var(--panel);border:.5px solid var(--line);border-radius:14px;overflow:hidden}
+:root .sgroup > .set{background:transparent;border:0;border-radius:0;border-top:.5px solid var(--line);padding:14px 18px;backdrop-filter:none;box-shadow:none}
+:root .sgroup > .set:first-child{border-top:0}
+:root .spane > .note{color:var(--faint);font-size:12.5px;margin:0 2px;max-width:640px;background:none;padding:0}
+#view-settings .vhead{display:none}
+@media (max-width:760px){ :root .settings.sx{grid-template-columns:1fr;gap:18px} .snav{position:static;flex-direction:row;overflow-x:auto} .snav button{white-space:nowrap} }
+
+/* ================================================================
+   Look A, "tv": black, graphite and white. No tinted light, no
+   colour except the green of a switch that's on.
+   ================================================================ */
+html[data-look="tv"]{
+  --night:#000;--ink:#000;--panel:#1c1c1e;--panel-2:rgba(118,118,128,.24);--panel-3:rgba(118,118,128,.36);--line:rgba(84,84,88,.5);
+  --fg:#f5f5f7;--muted:rgba(235,235,245,.6);--faint:rgba(235,235,245,.3);
+  --glass:rgba(30,30,32,.76);--glass-line:rgba(255,255,255,.1);
+  --honey:#f5f5f7;--honey-2:#f5f5f7;--honey-ink:#000;--seg-on:#636366;--seg-on-fg:#fff;
+  --f-ui:"Inter","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+  --f-head:"Inter","Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;
+  --f-body:var(--f-ui);--f-display:var(--f-head);--f-mono:var(--f-ui);
+}
+html[data-look="tv"] body{background:radial-gradient(1400px 480px at 50% -16%,rgba(255,255,255,.07),transparent 70%),#000;background-attachment:fixed;letter-spacing:-.011em}
+html[data-look="tv"] .top{background:rgba(0,0,0,.66);backdrop-filter:blur(30px) saturate(1.3)}
+html[data-look="tv"] .tabs{background:rgba(118,118,128,.2)}
+html[data-look="tv"] .tab[aria-selected="true"]{background:#f5f5f7;color:#000}
+html[data-look="tv"] .top .linkbar .field:focus-within{box-shadow:0 0 0 2px rgba(255,255,255,.45)}
+html[data-look="tv"] .btn.primary,html[data-look="tv"] .top .linkbar .go,html[data-look="tv"] .menu .delay .btn.primary,html[data-look="tv"] .clip-actions .btn.primary,html[data-look="tv"] .now-meta .hdr-chip{background:#f5f5f7;color:#000}
+html[data-look="tv"] .btn.primary:hover,html[data-look="tv"] .top .linkbar .go:hover{background:#fff}
+html[data-look="tv"] .btn,html[data-look="tv"] .pill,html[data-look="tv"] .sample{background:rgba(118,118,128,.22);border-color:transparent}
+html[data-look="tv"] .btn:hover,html[data-look="tv"] .pill:hover,html[data-look="tv"] .sample:hover{background:rgba(118,118,128,.34)}
+html[data-look="tv"] .btn.ghost{background:transparent}
+html[data-look="tv"] .stage{box-shadow:0 0 0 .5px rgba(255,255,255,.08),0 30px 80px rgba(0,0,0,.6)}
+html[data-look="tv"] .stage.is-empty{background:#0d0d0e}
+html[data-look="tv"] .empty{background:radial-gradient(70% 80% at 50% 0%,rgba(255,255,255,.06),transparent 70%)}
+html[data-look="tv"] body.po .stage.is-empty{background:#000}
+html[data-look="tv"] body.po .stage.is-empty .empty{background:radial-gradient(60% 60% at 50% 42%,rgba(255,255,255,.045),transparent 70%)}
+html[data-look="tv"] .seek .played,html[data-look="tv"] .prog i{background:#f5f5f7}
+html[data-look="tv"] .seek .knob{background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.55)}
+html[data-look="tv"] .hud{background:linear-gradient(transparent,rgba(0,0,0,.45) 40%,rgba(0,0,0,.82))}
+html[data-look="tv"] .stage.bar-below:not(.is-empty) .hud,html[data-look="tv"] body.po .stage.is-empty .hud{background:rgba(20,20,22,.96);border-top-color:rgba(255,255,255,.07)}
+html[data-look="tv"] dialog{background:rgba(28,28,30,.94)}
+html[data-look="tv"] .toast{background:rgba(44,44,46,.92)}
+html[data-look="tv"] .upbar{background:rgba(28,28,30,.85)}
+html[data-look="tv"] .errbox{background:rgba(0,0,0,.84)}
+html[data-look="tv"] select option,html[data-look="tv"] select optgroup,html[data-look="tv"] .speed-sel option{background:#2c2c2e;color:#f5f5f7}
+html[data-look="tv"] select option:checked{background:#48484a}
+html[data-look="tv"] .switch i{background:#39393d}
+html[data-look="tv"] .switch input:checked+i{background:#30d158}
+html[data-look="tv"] .switch input:checked+i::after{background:#fff}
+html[data-look="tv"] :focus-visible{outline-color:rgba(255,255,255,.85)}
+html[data-look="tv"] .search,html[data-look="tv"] .set select,html[data-look="tv"] .po-link input,html[data-look="tv"] .q-link input,html[data-look="tv"] .top .linkbar .field{background:rgba(118,118,128,.2)}
+/* light */
+html[data-look="tv"][data-theme="light"]{
+  --night:#f2f2f7;--ink:#f2f2f7;--fg:#1d1d1f;--muted:rgba(60,60,67,.62);--faint:rgba(60,60,67,.32);
+  --panel:#fff;--panel-2:rgba(118,118,128,.12);--panel-3:rgba(118,118,128,.2);--line:rgba(60,60,67,.14);--glass-light:#fff;
+  --honey:#1d1d1f;--honey-2:#1d1d1f;--honey-ink:#fff;--seg-on:#fff;--seg-on-fg:#000;
+}
+html[data-look="tv"][data-theme="light"] body{background:#f2f2f7}
+html[data-look="tv"][data-theme="light"] .top{background:rgba(242,242,247,.78)}
+html[data-look="tv"][data-theme="light"] .tabs{background:rgba(118,118,128,.12)}
+html[data-look="tv"][data-theme="light"] .tab[aria-selected="true"]{background:#fff;color:#000;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+html[data-look="tv"][data-theme="light"] .btn.primary,html[data-look="tv"][data-theme="light"] .top .linkbar .go{background:#1d1d1f;color:#fff}
+html[data-look="tv"][data-theme="light"] .btn,html[data-look="tv"][data-theme="light"] .pill,html[data-look="tv"][data-theme="light"] .sample{background:rgba(118,118,128,.12);color:var(--fg);box-shadow:none}
+html[data-look="tv"][data-theme="light"] .btn.ghost{background:transparent}
+html[data-look="tv"][data-theme="light"] .card,html[data-look="tv"][data-theme="light"] .shot{background:#fff}
+html[data-look="tv"][data-theme="light"] .stage{box-shadow:0 0 0 .5px rgba(0,0,0,.06),0 20px 50px rgba(0,0,0,.18)}
+html[data-look="tv"][data-theme="light"] .stage.is-empty,html[data-look="tv"][data-theme="light"] body.po,html[data-look="tv"][data-theme="light"] body.po .stage.is-empty{background:#f2f2f7}
+html[data-look="tv"][data-theme="light"] .empty,html[data-look="tv"][data-theme="light"] body.po .stage.is-empty .empty{background:none}
+html[data-look="tv"][data-theme="light"] .stage:not(.is-empty){--honey:#f5f5f7;--honey-2:#f5f5f7;--honey-ink:#000}
+html[data-look="tv"][data-theme="light"] .stage.bar-below:not(.is-empty) .hud,html[data-look="tv"][data-theme="light"] body.po .stage.is-empty .hud{background:rgba(255,255,255,.94);border-top-color:rgba(0,0,0,.08)}
+html[data-look="tv"][data-theme="light"] .stage.bar-below:not(.is-empty) .seek .played,html[data-look="tv"][data-theme="light"] body.po .stage.is-empty .seek .played{background:#1d1d1f}
+html[data-look="tv"][data-theme="light"] .stage.bar-below:not(.is-empty) .seek .knob{background:#1d1d1f}
+html[data-look="tv"][data-theme="light"] .switch input:checked+i{background:#34c759}
+html[data-look="tv"][data-theme="light"] :focus-visible{outline-color:rgba(0,0,0,.6)}
+html[data-look="tv"][data-theme="light"] .search,html[data-look="tv"][data-theme="light"] .set select,html[data-look="tv"][data-theme="light"] .po-link input,html[data-look="tv"][data-theme="light"] .top .linkbar .field{background:rgba(118,118,128,.12)}
+
+/* ================================================================
+   Look B, "slate": warm graphite and bone, like a piece of studio
+   hardware. Condensed type for names and numbers, small radii, solid
+   surfaces. One red, the tally light, marks capture.
+   ================================================================ */
+html[data-look="slate"]{
+  --night:#141312;--ink:#141312;--panel:#1d1b19;--panel-2:#282623;--panel-3:#34312d;--line:rgba(236,231,223,.08);
+  --fg:#ece7df;--muted:rgba(236,231,223,.56);--faint:rgba(236,231,223,.3);
+  --glass:rgba(29,27,25,.95);--glass-line:rgba(236,231,223,.1);
+  --honey:#ece7df;--honey-2:#ece7df;--honey-ink:#141312;--tally:#ff4b3e;--seg-on:#ece7df;--seg-on-fg:#141312;
+  --f-ui:"Archivo","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+  --f-head:"Archivo","Bahnschrift","Segoe UI",system-ui,sans-serif;
+  --f-body:var(--f-ui);--f-display:var(--f-head);--f-mono:var(--f-ui);
+}
+html[data-look="slate"] body{background:#141312;letter-spacing:0}
+html[data-look="slate"] .top{background:#141312;backdrop-filter:none;box-shadow:0 1px 0 rgba(236,231,223,.07)}
+html[data-look="slate"] .brand,html[data-look="slate"] .po-brand{font-family:var(--f-head);font-stretch:70%;font-weight:800;letter-spacing:.005em}
+html[data-look="slate"] .brand b,html[data-look="slate"] .po-brand b{color:var(--tally)}
+html[data-look="slate"] .tabs{background:none;gap:4px}
+html[data-look="slate"] .tab{border-radius:0;color:var(--muted)}
+html[data-look="slate"] .tab[aria-selected="true"]{background:none;color:var(--fg);box-shadow:inset 0 -2px 0 var(--fg)}
+html[data-look="slate"] .vhead h1,html[data-look="slate"] .spane h2{font-family:var(--f-head);font-stretch:68%;font-weight:700;letter-spacing:0}
+html[data-look="slate"] .vhead h1{font-size:44px;line-height:1}
+html[data-look="slate"] .spane h2{font-size:34px;line-height:1}
+html[data-look="slate"] .now-title{font-stretch:75%;font-size:28px;font-weight:650;letter-spacing:0;line-height:1.1}
+html[data-look="slate"] .empty h2{font-stretch:70%;letter-spacing:0}
+html[data-look="slate"] .time,html[data-look="slate"] .now-meta .sub{font-stretch:88%;font-variant-numeric:tabular-nums}
+html[data-look="slate"] .btn,html[data-look="slate"] .pill,html[data-look="slate"] .sample,html[data-look="slate"] .seg,html[data-look="slate"] .seg button,html[data-look="slate"] .search,html[data-look="slate"] .set select,html[data-look="slate"] .po-link input,html[data-look="slate"] .q-link input,html[data-look="slate"] .top .linkbar .field,html[data-look="slate"] .snav button{border-radius:6px}
+html[data-look="slate"] .btn,html[data-look="slate"] .pill,html[data-look="slate"] .sample{background:#282623;border:0;backdrop-filter:none}
+html[data-look="slate"] .btn:hover,html[data-look="slate"] .pill:hover,html[data-look="slate"] .sample:hover{background:#34312d}
+html[data-look="slate"] .btn.ghost{background:transparent}
+html[data-look="slate"] .btn.primary,html[data-look="slate"] .top .linkbar .go,html[data-look="slate"] .menu .delay .btn.primary,html[data-look="slate"] .clip-actions .btn.primary,html[data-look="slate"] .now-meta .hdr-chip{background:#ece7df;color:#141312}
+html[data-look="slate"] .btn.primary:hover,html[data-look="slate"] .top .linkbar .go:hover{background:#fff}
+html[data-look="slate"] #nowShot{background:var(--tally);color:#fff}
+html[data-look="slate"] #nowShot:hover{background:#ff6255}
+html[data-look="slate"] #shotBtn{color:var(--tally)}
+html[data-look="slate"] .top .linkbar .field,html[data-look="slate"] .search,html[data-look="slate"] .set select,html[data-look="slate"] .po-link input,html[data-look="slate"] .q-link input{background:#1d1b19;box-shadow:inset 0 0 0 1px rgba(236,231,223,.1);backdrop-filter:none}
+html[data-look="slate"] .top .linkbar .field:focus-within{box-shadow:inset 0 0 0 1px rgba(236,231,223,.5)}
+html[data-look="slate"] .stage{border-radius:8px;box-shadow:0 0 0 1px rgba(236,231,223,.06),0 24px 60px rgba(0,0,0,.5)}
+html[data-look="slate"] .stage.is-empty{background:#1a1816;backdrop-filter:none}
+html[data-look="slate"] .empty,html[data-look="slate"] body.po .stage.is-empty .empty{background:none}
+html[data-look="slate"] body.po .stage.is-empty{background:#141312}
+html[data-look="slate"] .ambient{opacity:.45}
+html[data-look="slate"] .seek .played,html[data-look="slate"] .prog i{background:#ece7df}
+html[data-look="slate"] .seek .knob{background:#ece7df;box-shadow:0 1px 6px rgba(0,0,0,.6)}
+html[data-look="slate"] .hud{background:linear-gradient(transparent,rgba(12,11,10,.5) 40%,rgba(12,11,10,.85))}
+html[data-look="slate"] .stage.bar-below:not(.is-empty) .hud,html[data-look="slate"] body.po .stage.is-empty .hud{background:#1d1b19;backdrop-filter:none;border-top:1px solid rgba(236,231,223,.07)}
+html[data-look="slate"] .card,html[data-look="slate"] .shot,html[data-look="slate"] .sgroup{background:#1d1b19;border:0;border-radius:8px;backdrop-filter:none}
+html[data-look="slate"] .card:hover{background:#24221f}
+html[data-look="slate"] .menu,html[data-look="slate"] .drawer,html[data-look="slate"] .banner,html[data-look="slate"] .osd,html[data-look="slate"] .tstats,html[data-look="slate"] .seek .tip{border-radius:8px}
+html[data-look="slate"] dialog{background:#1d1b19;border-radius:10px}
+html[data-look="slate"] .toast{background:#282623;border-radius:8px}
+html[data-look="slate"] .upbar{background:#1d1b19}
+html[data-look="slate"] .errbox{background:rgba(20,19,18,.9)}
+html[data-look="slate"] select option,html[data-look="slate"] select optgroup,html[data-look="slate"] .speed-sel option{background:#282623;color:#ece7df}
+html[data-look="slate"] select option:checked{background:#3d3a35}
+html[data-look="slate"] .switch i{background:#3a3733}
+html[data-look="slate"] .switch input:checked+i{background:#ece7df}
+html[data-look="slate"] .switch input:checked+i::after{background:#141312}
+html[data-look="slate"] .snav button[aria-selected="true"]{background:none;box-shadow:inset 2px 0 0 var(--fg);border-radius:0}
+html[data-look="slate"] .sblock h3{font-stretch:85%;font-weight:600}
+html[data-look="slate"] :focus-visible{outline-color:#ece7df}
+/* light */
+html[data-look="slate"][data-theme="light"]{
+  --night:#dddcd9;--ink:#dddcd9;--fg:#1a1917;--muted:rgba(26,25,23,.6);--faint:rgba(26,25,23,.34);
+  --panel:#eae9e6;--panel-2:#d2d0cc;--panel-3:#c6c4bf;--line:rgba(26,25,23,.1);--glass-light:#eae9e6;
+  --honey:#1a1917;--honey-2:#1a1917;--honey-ink:#eae9e6;--seg-on:#1a1917;--seg-on-fg:#eae9e6;--tally:#e0352a;
+}
+html[data-look="slate"][data-theme="light"] body,html[data-look="slate"][data-theme="light"] .top,html[data-look="slate"][data-theme="light"] body.po,html[data-look="slate"][data-theme="light"] body.po .stage.is-empty{background:#dddcd9}
+html[data-look="slate"][data-theme="light"] .top{box-shadow:0 1px 0 rgba(26,25,23,.1)}
+html[data-look="slate"][data-theme="light"] .btn,html[data-look="slate"][data-theme="light"] .pill,html[data-look="slate"][data-theme="light"] .sample{background:#cfcdc8;color:var(--fg);box-shadow:none}
+html[data-look="slate"][data-theme="light"] .btn:hover,html[data-look="slate"][data-theme="light"] .pill:hover{background:#c4c2bd}
+html[data-look="slate"][data-theme="light"] .btn.ghost{background:transparent}
+html[data-look="slate"][data-theme="light"] .btn.primary,html[data-look="slate"][data-theme="light"] .top .linkbar .go{background:#1a1917;color:#eae9e6}
+html[data-look="slate"][data-theme="light"] #nowShot{background:var(--tally);color:#fff}
+html[data-look="slate"][data-theme="light"] .card,html[data-look="slate"][data-theme="light"] .shot,html[data-look="slate"][data-theme="light"] .sgroup,html[data-look="slate"][data-theme="light"] .stage.is-empty{background:#eae9e6;box-shadow:none}
+html[data-look="slate"][data-theme="light"] .top .linkbar .field,html[data-look="slate"][data-theme="light"] .search,html[data-look="slate"][data-theme="light"] .set select,html[data-look="slate"][data-theme="light"] .po-link input{background:#eae9e6;box-shadow:inset 0 0 0 1px rgba(26,25,23,.14)}
+html[data-look="slate"][data-theme="light"] .stage:not(.is-empty){--honey:#ece7df;--honey-2:#ece7df;--honey-ink:#141312}
+html[data-look="slate"][data-theme="light"] .stage.bar-below:not(.is-empty) .hud,html[data-look="slate"][data-theme="light"] body.po .stage.is-empty .hud{background:#eae9e6;border-top-color:rgba(26,25,23,.1)}
+html[data-look="slate"][data-theme="light"] .stage.bar-below:not(.is-empty) .seek .played,html[data-look="slate"][data-theme="light"] body.po .stage.is-empty .seek .played,html[data-look="slate"][data-theme="light"] .stage.bar-below:not(.is-empty) .seek .knob{background:#1a1917}
+html[data-look="slate"][data-theme="light"] .switch i{background:#c6c4bf}
+html[data-look="slate"][data-theme="light"] .switch input:checked+i{background:#1a1917}
+html[data-look="slate"][data-theme="light"] .switch input:checked+i::after{background:#eae9e6}
+html[data-look="slate"][data-theme="light"] .tab[aria-selected="true"]{background:none;color:var(--fg);box-shadow:inset 0 -2px 0 var(--fg)}
+html[data-look="slate"][data-theme="light"] :focus-visible{outline-color:#1a1917}
+html[data-look="tv"][data-theme="light"] .stage.bar-below:not(.is-empty) .hud,html[data-look="tv"][data-theme="light"] body.po .stage.is-empty .hud{--honey:#1d1d1f;--honey-2:#1d1d1f;--honey-ink:#fff}
+html[data-look="slate"][data-theme="light"] .stage.bar-below:not(.is-empty) .hud,html[data-look="slate"][data-theme="light"] body.po .stage.is-empty .hud{--honey:#1a1917;--honey-2:#1a1917;--honey-ink:#eae9e6}
+/* ================================================================
+   Pretty looks: one structure, palettes set by data-look.
+   ================================================================ */
+html[data-look="velvet"]{--bg:#170c13;--sf:#22131c;--sf2:#2d1a25;--sf3:#3a2330;--tx:#f7e9ee;--acc:#f6a8bb;--acc2:#e47593;--acci:#2b0d19;--gl1:rgba(228,117,147,.20);--gl2:rgba(150,52,104,.24);--rgb:255,214,226}
+html[data-look="velvet"][data-theme="light"]{--bg:#f8eef1;--sf:#fffafb;--sf2:rgba(110,30,60,.07);--sf3:rgba(110,30,60,.12);--tx:#2b111c;--acc:#d45a7a;--acc2:#b13e5e;--acci:#fff;--gl1:rgba(228,117,147,.20);--gl2:rgba(246,168,187,.25);--rgb:60,15,32}
+html[data-look="lagoon"]{--bg:#091a1c;--sf:#0f2629;--sf2:#163236;--sf3:#1e3e43;--tx:#e5f3f0;--acc:#ffa585;--acc2:#ff7c68;--acci:#2b0c05;--gl1:rgba(52,190,170,.17);--gl2:rgba(255,140,110,.11);--rgb:205,245,236}
+html[data-look="lagoon"][data-theme="light"]{--bg:#e9f4f2;--sf:#fbfefd;--sf2:rgba(10,60,62,.07);--sf3:rgba(10,60,62,.12);--tx:#0c2a2c;--acc:#e8664f;--acc2:#cf4d3c;--acci:#fff;--gl1:rgba(52,190,170,.20);--gl2:rgba(255,165,133,.20);--rgb:8,45,48}
+html[data-look="sage"]{--bg:#111714;--sf:#18211c;--sf2:#212c26;--sf3:#2b3830;--tx:#edf1e7;--acc:#d6e8b8;--acc2:#a9cf8c;--acci:#17220f;--gl1:rgba(169,207,140,.13);--gl2:rgba(230,200,150,.08);--rgb:228,240,214}
+html[data-look="sage"][data-theme="light"]{--bg:#eef2ea;--sf:#fbfcf9;--sf2:rgba(30,60,30,.07);--sf3:rgba(30,60,30,.12);--tx:#18241a;--acc:#4f7d3c;--acc2:#3e6a2f;--acci:#fff;--gl1:rgba(169,207,140,.28);--gl2:rgba(240,215,170,.25);--rgb:20,40,22}
+
+html[data-pretty]{
+  --night:var(--bg);--ink:var(--bg);--panel:var(--sf);--panel-2:var(--sf2);--panel-3:var(--sf3);--line:rgba(var(--rgb),.09);
+  --fg:var(--tx);--muted:rgba(var(--rgb),.62);--faint:rgba(var(--rgb),.34);
+  --glass:color-mix(in srgb,var(--sf) 82%,transparent);--glass-line:rgba(var(--rgb),.1);--glass-light:var(--sf);
+  --honey:var(--acc);--honey-2:var(--acc2);--honey-ink:var(--acci);--seg-on:var(--acc);--seg-on-fg:var(--acci);
+  --f-ui:"Figtree","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+  --f-head:"Fraunces",Georgia,serif;
+  --f-body:var(--f-ui);--f-mono:var(--f-ui);
+}
+html[data-pretty][data-theme="light"]{--line:rgba(var(--rgb),.1);--glass:color-mix(in srgb,var(--sf) 90%,transparent)}
+html[data-pretty] body{background:radial-gradient(1100px 600px at 12% -10%,var(--gl1),transparent 65%),radial-gradient(900px 600px at 100% 110%,var(--gl2),transparent 65%),var(--bg);background-attachment:fixed}
+html[data-pretty] .top{background:color-mix(in srgb,var(--bg) 70%,transparent);backdrop-filter:blur(28px) saturate(1.4);box-shadow:0 .5px 0 rgba(var(--rgb),.08)}
+html[data-pretty] .brand,html[data-pretty] .po-brand{font-family:var(--f-head);font-style:italic;font-weight:600;font-variation-settings:"SOFT" 100,"opsz" 72;letter-spacing:-.01em}
+html[data-pretty] .brand b,html[data-pretty] .po-brand b{color:var(--acc)}
+html[data-pretty] .vhead h1,html[data-pretty] .spane h2,html[data-pretty] .now-title,html[data-pretty] .empty h2{font-family:var(--f-head);font-variation-settings:"SOFT" 100,"opsz" 48;font-weight:560;letter-spacing:-.015em}
+html[data-pretty] .vhead h1{font-size:40px}
+html[data-pretty] .spane h2{font-size:30px}
+html[data-pretty] .now-title{font-size:24px}
+html[data-pretty] .tabs{background:rgba(var(--rgb),.07)}
+html[data-pretty] .tab[aria-selected="true"]{background:var(--acc);color:var(--acci);box-shadow:none}
+html[data-pretty] .tab[aria-selected="true"] .count{color:var(--acci);opacity:.6}
+html[data-pretty] .btn,html[data-pretty] .pill,html[data-pretty] .sample{background:rgba(var(--rgb),.08);border-color:transparent;color:var(--fg)}
+html[data-pretty] .btn:hover,html[data-pretty] .pill:hover,html[data-pretty] .sample:hover{background:rgba(var(--rgb),.14)}
+html[data-pretty] .btn.ghost{background:transparent}
+html[data-pretty] .btn.primary,html[data-pretty] .top .linkbar .go,html[data-pretty] .menu .delay .btn.primary,html[data-pretty] .clip-actions .btn.primary,html[data-pretty] .now-meta .hdr-chip,html[data-pretty] #nowShot{background:linear-gradient(180deg,var(--acc),var(--acc2));color:var(--acci)}
+html[data-pretty] .btn.primary:hover,html[data-pretty] #nowShot:hover{filter:brightness(1.06)}
+html[data-pretty] .top .linkbar .field,html[data-pretty] .search,html[data-pretty] .set select,html[data-pretty] .po-link input,html[data-pretty] .q-link input{background:rgba(var(--rgb),.07)}
+html[data-pretty] .top .linkbar .field:focus-within{box-shadow:0 0 0 2px color-mix(in srgb,var(--acc) 60%,transparent)}
+html[data-pretty] .stage{box-shadow:0 0 0 .5px rgba(var(--rgb),.08),0 30px 80px rgba(0,0,0,.4)}
+html[data-pretty] .stage.is-empty{background:rgba(var(--rgb),.035)}
+html[data-pretty] .empty{background:radial-gradient(60% 70% at 30% 0%,var(--gl1),transparent 70%),radial-gradient(50% 70% at 85% 100%,var(--gl2),transparent 70%)}
+html[data-pretty] body.po,html[data-pretty] body.po .stage.is-empty{background:var(--bg)}
+html[data-pretty] body.po .stage.is-empty .empty{background:radial-gradient(55% 60% at 50% 40%,var(--gl1),transparent 70%),radial-gradient(40% 50% at 70% 75%,var(--gl2),transparent 70%)}
+html[data-pretty] .seek .played,html[data-pretty] .prog i{background:linear-gradient(90deg,var(--acc2),var(--acc))}
+html[data-pretty] .seek .knob{background:var(--acc);box-shadow:0 0 0 4px color-mix(in srgb,var(--acc) 30%,transparent),0 2px 8px rgba(0,0,0,.5)}
+html[data-pretty] .stage.bar-below:not(.is-empty) .hud,html[data-pretty] body.po .stage.is-empty .hud{background:color-mix(in srgb,var(--sf) 96%,transparent);border-top-color:rgba(var(--rgb),.08)}
+html[data-pretty] .hud{background:linear-gradient(transparent,rgba(0,0,0,.4) 40%,rgba(0,0,0,.78))}
+html[data-pretty] dialog{background:color-mix(in srgb,var(--sf) 94%,transparent);color:var(--fg)}
+html[data-pretty] .toast{background:color-mix(in srgb,var(--sf2) 94%,var(--bg));color:var(--fg)}
+html[data-pretty] .upbar{background:var(--sf)}
+html[data-pretty] select option,html[data-pretty] select optgroup,html[data-pretty] .speed-sel option{background:var(--sf2);color:var(--fg)}
+html[data-pretty][data-theme="dark"] select option,html[data-pretty]:not([data-theme="light"]) select option{background:color-mix(in srgb,var(--sf2) 100%,#000 0%)}
+html[data-pretty] .switch i{background:rgba(var(--rgb),.16)}
+html[data-pretty] .switch input:checked+i{background:var(--acc)}
+html[data-pretty] .switch input:checked+i::after{background:var(--acci)}
+html[data-pretty] :focus-visible{outline-color:var(--acc)}
+html[data-pretty] .card,html[data-pretty] .shot,html[data-pretty] .sgroup{background:var(--sf);border-color:rgba(var(--rgb),.07)}
+html[data-pretty] .snav button[aria-selected="true"]{background:rgba(var(--rgb),.1);color:var(--fg);box-shadow:inset 3px 0 0 var(--acc)}
+html[data-pretty] .sblock h3{color:var(--muted)}
+/* the picture always sits on dark; keep the dark palette inside the player in light mode */
+html[data-pretty][data-theme="light"] .stage:not(.is-empty){--fg:#f7f2f4;--muted:rgba(255,255,255,.62);--line:rgba(255,255,255,.08)}
+html[data-pretty][data-theme="light"] .stage{box-shadow:0 0 0 .5px rgba(var(--rgb),.08),0 24px 60px rgba(var(--rgb),.18)}
+html[data-pretty][data-theme="light"] .stage.bar-below:not(.is-empty) .hud,html[data-pretty][data-theme="light"] body.po .stage.is-empty .hud{background:color-mix(in srgb,var(--sf) 95%,transparent);--fg:var(--tx)}
+html[data-pretty][data-theme="light"] .stage.bar-below:not(.is-empty) .hud .cb:not(.on),html[data-pretty][data-theme="light"] .stage.bar-below:not(.is-empty) .hud .time,html[data-pretty][data-theme="light"] .stage.bar-below:not(.is-empty) .speed-sel{color:var(--tx)}
+:root .stage:focus-visible,:root .stage:focus{outline:none}
 </style>
 </head>
 <body>
@@ -4442,6 +4681,49 @@ if (N && N.onUpdate) {
   };
   N.onUpdate(renderUpd); N.updateState().then(renderUpd);
 }
+
+/* ---------------- settings sections ---------------- */
+(function groupSettings(){
+  const box = document.querySelector(".settings"); if (!box) return;
+  const rows = [...box.querySelectorAll(":scope > .set")], note = box.querySelector(":scope > .note");
+  const take = key => {
+    const i = rows.findIndex(r => key[0] === "#" ? r.id === key.slice(1) : (r.querySelector(".d strong") || {}).textContent?.trim().startsWith(key));
+    return i < 0 ? null : rows.splice(i, 1)[0];
+  };
+  const groups = [
+    ["general", "General", [[null, ["Updates", "Appearance", "Controls"]], ["Performance", ["#gpuRow", "Ambient glow"]]]],
+    ["playback", "Playback", [[null, ["Skip interval", "Default speed", "Resume where", "Play next"]], ["Links and torrents", ["#streamCacheRow", "Show torrent stats"]]]],
+    ["subs", "Subtitles", [[null, ["Turn on English", "One-liner"]], ["Look", ["#subStyleCard", "Subtitle font"]], ["Subtitle files", ["#sidecarRow", "#saveSubsRow"]], ["Downloading", ["#subAcctCard"]]]],
+    ["shots", "Screenshots and clips", [[null, ["Shots mode", "Screenshot format", "Subtitles in screenshots"]], ["Saving", ["Save shots to a folder", "Save locations"]], ["Logos", ["#logoCard"]]]],
+    ["library", "Library", [[null, ["Clear history"]]]]
+  ];
+  const nav = document.createElement("nav"); nav.className = "snav"; nav.setAttribute("role", "tablist"); nav.setAttribute("aria-label", "Settings sections");
+  const panes = document.createElement("div"); panes.className = "spanes";
+  for (const [id, title, blocks] of groups) {
+    const b = document.createElement("button"); b.type = "button"; b.setAttribute("role", "tab"); b.dataset.pane = id; b.textContent = title; nav.append(b);
+    const pane = document.createElement("section"); pane.className = "spane"; pane.dataset.pane = id; pane.setAttribute("role", "tabpanel");
+    pane.innerHTML = `<h2>${title}</h2>`;
+    for (const [label, keys] of blocks) {
+      const blk = document.createElement("div"); blk.className = "sblock";
+      if (label) { const h = document.createElement("h3"); h.textContent = label; blk.append(h); }
+      const g = document.createElement("div"); g.className = "sgroup";
+      keys.forEach(k => { const r = take(k); if (r) g.append(r); });
+      blk.append(g); pane.append(blk);
+    }
+    if (id === "library" && note) pane.append(note);
+    panes.append(pane);
+  }
+  rows.forEach(r => panes.querySelector(".sgroup").append(r));   // anything not listed still shows, under General
+  box.textContent = ""; box.classList.add("sx"); box.append(nav, panes);
+  const show = id => {
+    if (!groups.some(g => g[0] === id)) id = "general";
+    nav.querySelectorAll("button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.pane === id)));
+    panes.querySelectorAll(".spane").forEach(p => p.hidden = p.dataset.pane !== id);
+    S.setPane = id; saveSettings();
+  };
+  nav.onclick = e => { const b = e.target.closest("button[data-pane]"); if (b) { show(b.dataset.pane); b.blur(); } };
+  show(S.setPane || "general");
+})();
 
 /* ---------------- boot ---------------- */
 applyVol(false); bindSettings(); renderSkipLabels(); renderLibCount(); renderRail(); loadShots();
