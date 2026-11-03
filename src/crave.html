@@ -1001,6 +1001,31 @@ html[data-theme="light"] .home-hero:not(.welcome) .btn.primary{background:#eceef
 .hcard .th i{background:#fff!important;box-shadow:0 0 4px rgba(0,0,0,.5)}
 #homeBtn svg.i{width:21px;height:21px}
 button.brand{border:0;background:none;padding:0;cursor:pointer;color:inherit}
+/* ================================================================
+   Orange accent (the colour of the Crave icon) on the plain dark look:
+   progress, main buttons, switches, and controls that are on.
+   ================================================================ */
+html[data-look="tv"],html[data-look="tv"][data-theme="light"]{--honey:#ffa53a;--honey-2:#ff9424;--honey-ink:#1f1300;--acc:#ffa53a}
+html[data-look="tv"][data-theme="light"]{--acc:#e8820f}
+html[data-look="tv"] .btn.primary,html[data-look="tv"] .top .linkbar .go,html[data-look="tv"] .menu .delay .btn.primary,html[data-look="tv"] .clip-actions .btn.primary,html[data-look="tv"] .now-meta .hdr-chip,
+html[data-look="tv"][data-theme="light"] .btn.primary,html[data-look="tv"][data-theme="light"] .top .linkbar .go,html[data-look="tv"][data-theme="light"] .home-hero:not(.welcome) .btn.primary{background:#ffa53a;color:#1f1300}
+html[data-look="tv"] .btn.primary:hover,html[data-look="tv"] .top .linkbar .go:hover{background:#ffb457}
+html .seek .played,html[data-look="tv"] .seek .played,html[data-look="tv"] .prog i,
+html[data-look="tv"][data-theme="light"] .stage.bar-below:not(.is-empty) .seek .played,html[data-look="tv"][data-theme="light"] body.po .stage.is-empty .seek .played{background:#ffa53a}
+html[data-look="tv"] .seek .knob,html[data-look="tv"][data-theme="light"] .stage.bar-below:not(.is-empty) .seek .knob{background:#ffa53a;box-shadow:0 0 0 4px rgba(255,165,58,.28),0 2px 8px rgba(0,0,0,.5)}
+html[data-look="tv"][data-theme="light"] .stage.bar-below:not(.is-empty) .hud,html[data-look="tv"][data-theme="light"] body.po .stage.is-empty .hud{--honey:#e8820f;--honey-2:#e8820f;--honey-ink:#fff}
+html[data-look="tv"] .switch input:checked+i,html[data-look="tv"][data-theme="light"] .switch input:checked+i{background:#ffa53a}
+html[data-look="tv"] .switch input:checked+i::after,html[data-look="tv"][data-theme="light"] .switch input:checked+i::after{background:#fff}
+html[data-look="tv"] .cb.on,html[data-look="tv"] #boardBtn.on{color:var(--acc)}
+html[data-look="tv"] .vol input{accent-color:#ffa53a}
+.hero-p i,.hcard .th i{background:#ffa53a!important}
+.sb-tile.new img{box-shadow:0 0 0 2px #ffa53a}
+.sb-tile.new span{color:var(--acc)}
+.home-brand b,.brand b,.po-brand b{color:#ffa53a}
+.seg button[aria-checked="true"]{background:#ffa53a;color:#1f1300}
+.snav button[aria-selected="true"]{box-shadow:inset 3px 0 0 #ffa53a}
+html[data-look="tv"] .tab[aria-selected="true"]{background:#ffa53a;color:#1f1300}
+html[data-look="tv"] .tab[aria-selected="true"] .count{color:rgba(31,19,0,.55)}
 </style>
 </head>
 <body>
@@ -1095,7 +1120,7 @@ button.brand{border:0;background:none;padding:0;cursor:pointer;color:inherit}
           <div class="home" id="home">
             <div class="home-in">
               <header class="home-top">
-                <div class="home-brand">Crave</div>
+                <div class="home-brand">Crave<b>.</b></div>
                 <form class="home-search" id="homeForm" autocomplete="off" role="search">
                   <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>
                   <input id="homeQ" type="text" spellcheck="false" placeholder="Search your videos, or paste a link to play" aria-label="Search your videos, or paste a link to play">
