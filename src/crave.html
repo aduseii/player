@@ -1035,6 +1035,12 @@ html[data-look="tv"] .tab[aria-selected="true"] .count{color:color-mix(in srgb,v
 .sw.custom[aria-checked="true"]::after{content:"";position:absolute;inset:7px;border-radius:50%;background:var(--c);box-shadow:0 0 0 1px rgba(0,0,0,.25)}
 .sw.custom input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0;margin:0}
 .brand,.home-brand,.po-brand{text-transform:lowercase}
+/* cleaner bar: frame steps only while paused; the title in the middle */
+.stage:not(.paused) .frame-btn{display:none}
+.ctrls{position:relative}
+.ctl-title{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);max-width:30%;font:600 13.5px/1.2 var(--f-ui);color:var(--fg);opacity:.92;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;pointer-events:none;letter-spacing:-.005em}
+body:not(.po) .ctl-title{display:none}
+@media (max-width:980px){ .ctl-title{display:none} }
 </style>
 </head>
 <body>
@@ -1182,6 +1188,7 @@ html[data-look="tv"] .tab[aria-selected="true"] .count{color:color-mix(in srgb,v
                 <input type="range" id="volRange" min="0" max="1" step="0.02" value="1" aria-label="Volume">
               </div>
               <span class="grow"></span>
+              <span class="ctl-title" id="ctlTitle"></span>
               <label class="cb speed" title="Speed ([ and ])"><svg class="i"><use href="#i-speed"/></svg>
                 <select class="speed-sel" id="speedSel" aria-label="Playback speed">
                   <option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2×</option><option value="3">3×</option>
@@ -2017,7 +2024,7 @@ function stop(){
   saveProgress(); teardown(); cur = null;
   $("#empty").hidden = false; $("#stage").classList.add("is-empty"); $("#hud").hidden = true; $("#nowbar").hidden = true; $("#spinner").hidden = true;
   $("#stageTitle").textContent = ""; $("#stageKind").hidden = true;
-  renderRail(); document.title = "Crave";
+  renderRail(); document.title = "Crave"; $("#ctlTitle").textContent = "";
 }
 $("#errClose").onclick = () => { $("#errbox").hidden = true; };
 
@@ -2290,7 +2297,8 @@ function renderNow(){
   $("#stageTitle").textContent = cur.name; $("#stageKind").textContent = KIND_LABEL[cur.kind]; $("#stageKind").hidden = false;
   $("#copyLinkBtn").hidden = !cur.url;
   fitStage();
-  document.title = cur.name + " · Crave";
+  document.title = String(cur.name || "").replace(/\.(mp4|m4v|mkv|webm|mov|avi|wmv|flv|ts|m2ts|mpg|mpeg|torrent)$/i, "");
+  $("#ctlTitle").textContent = document.title; $("#ctlTitle").title = cur.name || "";
 }
 
 /* ---------------- library view ---------------- */
