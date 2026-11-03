@@ -58,7 +58,39 @@ if (!app.requestSingleInstanceLock()) {
     sendOpen(openArgs(argv));
   });
   app.whenReady().then(start);
-app.whenReady().then(() => { ffSupports(); setTimeout(hwEncoder, 4000); });   // learn what the bundled ffmpeg can do, ahead of the first video
+app.whenReady().then(() => { ffSupports(); setTimeout(hwEncoder, 4000); });
+
+// Windows keeps its own copy of app icons, so after an update that changed the icon, shortcuts and taskbar
+// pins can keep showing the old one. Once per version: point Crave's shortcuts at Crave.exe again (which
+// makes Windows re-read the icon) and ask Windows to refresh its icon cache.
+function refreshWindowsIcons(){
+  if (process.platform !== "win32" || !app.isPackaged) return;
+  const mark = path.join(app.getPath("userData"), "icons-refreshed.txt");
+  try { if (fs.readFileSync(mark, "utf8").trim() === app.getVersion()) return; } catch {}
+  const appData = process.env.APPDATA || "", home = process.env.USERPROFILE || "";
+  const places = [
+    path.join(appData, "Microsoft", "Windows", "Start Menu", "Programs", "Crave.lnk"),
+    path.join(home, "Desktop", "Crave.lnk"),
+    path.join(home, "OneDrive", "Desktop", "Crave.lnk"),
+    path.join(appData, "Microsoft", "Internet Explorer", "Quick Launch", "User Pinned", "TaskBar", "Crave.lnk"),
+    path.join(appData, "Microsoft", "Internet Explorer", "Quick Launch", "User Pinned", "StartMenu", "Crave.lnk")
+  ];
+  for (const lnk of places) {
+    try {
+      if (!fs.existsSync(lnk)) continue;
+      const cur = shell.readShortcutLink(lnk);
+      if (!cur.target || path.basename(cur.target).toLowerCase() !== "crave.exe") continue;
+      shell.writeShortcutLink(lnk, "update", { target: cur.target, icon: cur.target, iconIndex: 0 });
+      const now = new Date(); fs.utimesSync(lnk, now, now);
+    } catch {}
+  }
+  try {
+    const { spawn } = require("child_process"), ie = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "ie4uinit.exe");
+    if (fs.existsSync(ie)) { spawn(ie, ["-show"], { detached: true, stdio: "ignore", windowsHide: true }).unref(); }
+  } catch {}
+  try { fs.writeFileSync(mark, app.getVersion()); } catch {}
+}
+app.whenReady().then(() => setTimeout(refreshWindowsIcons, 3000));   // learn what the bundled ffmpeg can do, ahead of the first video
 }
 
 function start(){
