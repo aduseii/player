@@ -862,36 +862,36 @@ html[data-look="tv"]{
   --f-head:"Inter","Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;
   --f-body:var(--f-ui);--f-display:var(--f-head);--f-mono:var(--f-ui);
 }
-html[data-look="tv"] body{background:#0e0f11;letter-spacing:-.011em}
-html[data-look="tv"] .top{background:rgba(14,15,17,.82);backdrop-filter:blur(30px) saturate(1.3)}
-html[data-look="tv"] .tabs{background:#17181b}
+html[data-look="tv"] body{background:var(--night);letter-spacing:-.011em}
+html[data-look="tv"] .top{background:color-mix(in srgb,var(--night) 82%,transparent);backdrop-filter:blur(30px) saturate(1.3)}
+html[data-look="tv"] .tabs{background:var(--panel)}
 html[data-look="tv"] .tab[aria-selected="true"]{background:#eceef2;color:#0e0f11}
 html[data-look="tv"] .top .linkbar .field:focus-within{box-shadow:0 0 0 2px rgba(255,255,255,.45)}
 html[data-look="tv"] .btn.primary,html[data-look="tv"] .top .linkbar .go,html[data-look="tv"] .menu .delay .btn.primary,html[data-look="tv"] .clip-actions .btn.primary,html[data-look="tv"] .now-meta .hdr-chip{background:#eceef2;color:#0e0f11}
 html[data-look="tv"] .btn.primary:hover,html[data-look="tv"] .top .linkbar .go:hover{background:#fff}
-html[data-look="tv"] .btn,html[data-look="tv"] .pill,html[data-look="tv"] .sample{background:#202226;border-color:transparent;backdrop-filter:none}
-html[data-look="tv"] .btn:hover,html[data-look="tv"] .pill:hover,html[data-look="tv"] .sample:hover{background:#2a2c31}
+html[data-look="tv"] .btn,html[data-look="tv"] .pill,html[data-look="tv"] .sample{background:var(--panel-2);border-color:transparent;backdrop-filter:none}
+html[data-look="tv"] .btn:hover,html[data-look="tv"] .pill:hover,html[data-look="tv"] .sample:hover{background:var(--panel-3)}
 html[data-look="tv"] .btn.ghost{background:transparent}
 html[data-look="tv"] .stage{box-shadow:0 0 0 .5px rgba(255,255,255,.08),0 30px 80px rgba(0,0,0,.6)}
-html[data-look="tv"] .stage.is-empty{background:#0d0d0e}
+html[data-look="tv"] .stage.is-empty{background:var(--night)}
 html[data-look="tv"] .empty{background:radial-gradient(70% 80% at 50% 0%,rgba(255,255,255,.06),transparent 70%)}
-html[data-look="tv"] body.po .stage.is-empty{background:#000}
+html[data-look="tv"] body.po .stage.is-empty{background:var(--night)}
 html[data-look="tv"] body.po .stage.is-empty .empty{background:radial-gradient(60% 60% at 50% 42%,rgba(255,255,255,.045),transparent 70%)}
 html[data-look="tv"] .seek .played,html[data-look="tv"] .prog i{background:#f5f5f7}
 html[data-look="tv"] .seek .knob{background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.55)}
 html[data-look="tv"] .hud{background:linear-gradient(transparent,rgba(0,0,0,.45) 40%,rgba(0,0,0,.82))}
-html[data-look="tv"] .stage.bar-below:not(.is-empty) .hud,html[data-look="tv"] body.po .stage.is-empty .hud{background:#141518;border-top-color:rgba(255,255,255,.07)}
+html[data-look="tv"] .stage.bar-below:not(.is-empty) .hud,html[data-look="tv"] body.po .stage.is-empty .hud{background:var(--panel);border-top-color:rgba(255,255,255,.07)}
 html[data-look="tv"] dialog{background:rgba(28,28,30,.94)}
 html[data-look="tv"] .toast{background:rgba(44,44,46,.92)}
 html[data-look="tv"] .upbar{background:rgba(28,28,30,.85)}
 html[data-look="tv"] .errbox{background:rgba(0,0,0,.84)}
-html[data-look="tv"] select option,html[data-look="tv"] select optgroup,html[data-look="tv"] .speed-sel option{background:#202226;color:#eceef2}
+html[data-look="tv"] select option,html[data-look="tv"] select optgroup,html[data-look="tv"] .speed-sel option{background:var(--panel-2);color:#eceef2}
 html[data-look="tv"] select option:checked{background:#33363c}
 html[data-look="tv"] .switch i{background:#39393d}
 html[data-look="tv"] .switch input:checked+i{background:#eceef2}
 html[data-look="tv"] .switch input:checked+i::after{background:#0e0f11}
 html[data-look="tv"] :focus-visible{outline-color:rgba(255,255,255,.85)}
-html[data-look="tv"] .search,html[data-look="tv"] .set select,html[data-look="tv"] .po-link input,html[data-look="tv"] .q-link input,html[data-look="tv"] .top .linkbar .field{background:#17181b;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+html[data-look="tv"] .search,html[data-look="tv"] .set select,html[data-look="tv"] .po-link input,html[data-look="tv"] .q-link input,html[data-look="tv"] .top .linkbar .field{background:var(--panel);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
 /* light */
 html[data-look="tv"][data-theme="light"]{
   --night:#f2f2f7;--ink:#f2f2f7;--fg:#1d1d1f;--muted:rgba(60,60,67,.62);--faint:rgba(60,60,67,.32);
@@ -1005,27 +1005,36 @@ button.brand{border:0;background:none;padding:0;cursor:pointer;color:inherit}
    Orange accent (the colour of the Crave icon) on the plain dark look:
    progress, main buttons, switches, and controls that are on.
    ================================================================ */
-html[data-look="tv"],html[data-look="tv"][data-theme="light"]{--honey:#ffa53a;--honey-2:#ff9424;--honey-ink:#1f1300;--acc:#ffa53a}
-html[data-look="tv"][data-theme="light"]{--acc:#e8820f}
+:root{--a:#ffa53a;--a-ink:#1f1300;--a-hi:#ffb457;--a-soft:rgba(255,165,58,.28);--a-dk:#e8820f}
+html[data-look="tv"],html[data-look="tv"][data-theme="light"]{--honey:var(--a);--honey-2:var(--a);--honey-ink:var(--a-ink);--acc:var(--a)}
+html[data-look="tv"][data-theme="light"]{--acc:var(--a-dk)}
 html[data-look="tv"] .btn.primary,html[data-look="tv"] .top .linkbar .go,html[data-look="tv"] .menu .delay .btn.primary,html[data-look="tv"] .clip-actions .btn.primary,html[data-look="tv"] .now-meta .hdr-chip,
-html[data-look="tv"][data-theme="light"] .btn.primary,html[data-look="tv"][data-theme="light"] .top .linkbar .go,html[data-look="tv"][data-theme="light"] .home-hero:not(.welcome) .btn.primary{background:#ffa53a;color:#1f1300}
-html[data-look="tv"] .btn.primary:hover,html[data-look="tv"] .top .linkbar .go:hover{background:#ffb457}
+html[data-look="tv"][data-theme="light"] .btn.primary,html[data-look="tv"][data-theme="light"] .top .linkbar .go,html[data-look="tv"][data-theme="light"] .home-hero:not(.welcome) .btn.primary{background:var(--a);color:var(--a-ink)}
+html[data-look="tv"] .btn.primary:hover,html[data-look="tv"] .top .linkbar .go:hover{background:var(--a-hi)}
 html .seek .played,html[data-look="tv"] .seek .played,html[data-look="tv"] .prog i,
-html[data-look="tv"][data-theme="light"] .stage.bar-below:not(.is-empty) .seek .played,html[data-look="tv"][data-theme="light"] body.po .stage.is-empty .seek .played{background:#ffa53a}
-html[data-look="tv"] .seek .knob,html[data-look="tv"][data-theme="light"] .stage.bar-below:not(.is-empty) .seek .knob{background:#ffa53a;box-shadow:0 0 0 4px rgba(255,165,58,.28),0 2px 8px rgba(0,0,0,.5)}
-html[data-look="tv"][data-theme="light"] .stage.bar-below:not(.is-empty) .hud,html[data-look="tv"][data-theme="light"] body.po .stage.is-empty .hud{--honey:#e8820f;--honey-2:#e8820f;--honey-ink:#fff}
-html[data-look="tv"] .switch input:checked+i,html[data-look="tv"][data-theme="light"] .switch input:checked+i{background:#ffa53a}
+html[data-look="tv"][data-theme="light"] .stage.bar-below:not(.is-empty) .seek .played,html[data-look="tv"][data-theme="light"] body.po .stage.is-empty .seek .played{background:var(--a)}
+html[data-look="tv"] .seek .knob,html[data-look="tv"][data-theme="light"] .stage.bar-below:not(.is-empty) .seek .knob{background:var(--a);box-shadow:0 0 0 4px var(--a-soft),0 2px 8px rgba(0,0,0,.5)}
+html[data-look="tv"][data-theme="light"] .stage.bar-below:not(.is-empty) .hud,html[data-look="tv"][data-theme="light"] body.po .stage.is-empty .hud{--honey:var(--a-dk);--honey-2:var(--a-dk);--honey-ink:var(--a-ink)}
+html[data-look="tv"] .switch input:checked+i,html[data-look="tv"][data-theme="light"] .switch input:checked+i{background:var(--a)}
 html[data-look="tv"] .switch input:checked+i::after,html[data-look="tv"][data-theme="light"] .switch input:checked+i::after{background:#fff}
 html[data-look="tv"] .cb.on,html[data-look="tv"] #boardBtn.on{color:var(--acc)}
-html[data-look="tv"] .vol input{accent-color:#ffa53a}
-.hero-p i,.hcard .th i{background:#ffa53a!important}
-.sb-tile.new img{box-shadow:0 0 0 2px #ffa53a}
+html[data-look="tv"] .vol input{accent-color:var(--a)}
+.hero-p i,.hcard .th i{background:var(--a)!important}
+.sb-tile.new img{box-shadow:0 0 0 2px var(--a)}
 .sb-tile.new span{color:var(--acc)}
-.home-brand b,.brand b,.po-brand b{color:#ffa53a}
-.seg button[aria-checked="true"]{background:#ffa53a;color:#1f1300}
-.snav button[aria-selected="true"]{box-shadow:inset 3px 0 0 #ffa53a}
-html[data-look="tv"] .tab[aria-selected="true"]{background:#ffa53a;color:#1f1300}
-html[data-look="tv"] .tab[aria-selected="true"] .count{color:rgba(31,19,0,.55)}
+.home-brand b,.brand b,.po-brand b{color:var(--a)}
+.seg button[aria-checked="true"]{background:var(--a);color:var(--a-ink)}
+.snav button[aria-selected="true"]{box-shadow:inset 3px 0 0 var(--a)}
+html[data-look="tv"] .tab[aria-selected="true"]{background:var(--a);color:var(--a-ink)}
+html[data-look="tv"] .tab[aria-selected="true"] .count{color:color-mix(in srgb,var(--a-ink) 55%,transparent)}
+.swatches{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+.sw{position:relative;width:30px;height:30px;flex:none;border-radius:50%;border:0;padding:0;margin:0;background:var(--c);cursor:pointer;box-shadow:inset 0 0 0 1px rgba(255,255,255,.16)}
+.sw[aria-checked="true"]{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--fg)}
+.sw:focus-visible{outline:2px solid var(--fg);outline-offset:3px}
+.sw.custom{background:conic-gradient(#ff5f5f,#ffd84a,#5fe08a,#4fb4ff,#a98bff,#ff5fd0,#ff5f5f)}
+.sw.custom[aria-checked="true"]::after{content:"";position:absolute;inset:7px;border-radius:50%;background:var(--c);box-shadow:0 0 0 1px rgba(0,0,0,.25)}
+.sw.custom input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0;margin:0}
+.brand,.home-brand,.po-brand{text-transform:lowercase}
 </style>
 </head>
 <body>
@@ -1062,7 +1071,7 @@ html[data-look="tv"] .tab[aria-selected="true"] .count{color:rgba(31,19,0,.55)}
 </svg>
 
 <header class="top">
-  <button class="brand" id="brandHome" title="Back to Home" aria-label="Crave: back to Home">Crave<b>.</b></button>
+  <button class="brand" id="brandHome" title="Back to Home" aria-label="Crave: back to Home">crave<b>.</b></button>
   <nav class="tabs" role="tablist" aria-label="Sections">
     <button class="tab home-tab" id="homeTab" title="Back to Home">Home</button>
     <button class="tab" role="tab" data-view="board" aria-selected="true">Watch</button>
@@ -1108,7 +1117,7 @@ html[data-look="tv"] .tab[aria-selected="true"] .count{color:rgba(31,19,0,.55)}
             <div>
               <h2 class="full-only">Paste a link.<br><em>Watch it.</em></h2>
               <p class="full-only">Video files, streams and torrents. Open a file, paste a link at the top, or drop a video anywhere.</p>
-              <div class="po-only po-brand">Crave<b>.</b></div>
+              <div class="po-only po-brand">crave<b>.</b></div>
               <form class="po-only po-link" id="poLinkForm" autocomplete="off"><input id="poUrl" type="text" spellcheck="false" placeholder="Paste a link, stream or magnet" aria-label="Video link"><button class="btn primary" type="submit">Play</button></form>
               <div class="empty-actions"><button class="btn primary" id="emptyOpen"><svg class="i"><use href="#i-folder"/></svg>Open file</button></div>
               <p class="samples-lbl full-only">Or try one of these</p>
@@ -1120,7 +1129,7 @@ html[data-look="tv"] .tab[aria-selected="true"] .count{color:rgba(31,19,0,.55)}
           <div class="home" id="home">
             <div class="home-in">
               <header class="home-top">
-                <div class="home-brand">Crave<b>.</b></div>
+                <div class="home-brand">crave<b>.</b></div>
                 <form class="home-search" id="homeForm" autocomplete="off" role="search">
                   <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>
                   <input id="homeQ" type="text" spellcheck="false" placeholder="Search your videos, or paste a link to play" aria-label="Search your videos, or paste a link to play">
@@ -1263,6 +1272,10 @@ html[data-look="tv"] .tab[aria-selected="true"] .count{color:rgba(31,19,0,.55)}
     <div class="settings">
       <div class="set"><div class="d"><strong>Appearance</strong><span>Light, dark, or follow Windows. The picture always sits on black.</span></div>
         <div class="seg" id="setTheme" role="radiogroup" aria-label="Appearance"><button role="radio" data-theme-opt="light">Light</button><button role="radio" data-theme-opt="dark">Dark</button><button role="radio" data-theme-opt="system">Match Windows</button></div></div>
+      <div class="set" id="accentRow"><div class="d"><strong>Accent colour</strong><span>The progress bar, main buttons and anything that's switched on. Pick one or make your own.</span></div>
+        <div class="swatches" id="accentSw" role="radiogroup" aria-label="Accent colour"></div></div>
+      <div class="set" id="bgRow"><div class="d"><strong>Background</strong><span>The colour behind everything in dark mode. The picture itself always sits on black.</span></div>
+        <div class="swatches" id="bgSw" role="radiogroup" aria-label="Background"></div></div>
       <div class="set"><div class="d"><strong>Controls</strong><span>Below the picture keeps the bar in view and never covers the video. Full screen always uses the fading bar.</span></div>
         <div class="seg" role="radiogroup" aria-label="Controls"><button role="radio" data-ctrl-opt="below">Below the picture</button><button role="radio" data-ctrl-opt="over">Over the picture</button></div></div>
       <div class="set"><div class="d"><strong>Skip interval</strong><span>How far the back and forward buttons jump.</span></div>
@@ -4808,6 +4821,59 @@ $("#shotBoard").addEventListener("click", e => {
 v.addEventListener("loadedmetadata", renderBoard);
 setBoard(!!S.board);
 
+/* ---------------- your own colours ---------------- */
+const ACCENTS = [["Orange", "#ffa53a"], ["Rose", "#ff7aa2"], ["Coral", "#ff7a5c"], ["Gold", "#f5c542"], ["Mint", "#4fd8a6"], ["Sky", "#5ab8ff"], ["Violet", "#a98bff"], ["White", "#eceef2"]];
+const BGS = [["Graphite", "#0e0f11"], ["Black", "#000000"], ["Midnight", "#0b1020"], ["Plum", "#170c18"], ["Forest", "#0c1511"], ["Espresso", "#17110c"]];
+const hexRgb = h => { h = String(h || "").replace("#", ""); if (h.length === 3) h = h.replace(/./g, c => c + c); const n = parseInt(h, 16); return isNaN(n) ? [0, 0, 0] : [n >> 16 & 255, n >> 8 & 255, n & 255]; };
+const rgbHex = c => "#" + c.map(x => Math.round(Math.max(0, Math.min(255, x))).toString(16).padStart(2, "0")).join("");
+const mixHex = (a, b, t) => { const x = hexRgb(a), y = hexRgb(b); return rgbHex(x.map((v, i) => v + (y[i] - v) * t)); };
+const lumOf = h => { const c = hexRgb(h).map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); }); return .2126 * c[0] + .7152 * c[1] + .0722 * c[2]; };
+const isHex = v => /^#[0-9a-f]{6}$/i.test(v || "");
+function applyColours(){
+  const r = document.documentElement.style, a = isHex(S.accent) ? S.accent.toLowerCase() : "#ffa53a", L = lumOf(a);
+  const [ar, ag, ab] = hexRgb(a);
+  r.setProperty("--a", a);
+  r.setProperty("--a-ink", L > .32 ? mixHex(a, "#000000", .86) : "#ffffff");
+  r.setProperty("--a-hi", mixHex(a, "#ffffff", .18));
+  r.setProperty("--a-soft", `rgba(${ar},${ag},${ab},.28)`);
+  r.setProperty("--a-dk", L > .75 ? "#1d1d1f" : L > .4 ? mixHex(a, "#000000", .28) : L > .25 ? mixHex(a, "#000000", .12) : a);
+  const dark = document.documentElement.dataset.theme !== "light", bg = isHex(S.bg) ? S.bg.toLowerCase() : "#0e0f11";
+  const keys = ["--night", "--ink", "--panel", "--panel-2", "--panel-3"];
+  if (!dark || bg === "#0e0f11") keys.forEach(k => r.removeProperty(k));
+  else {
+    const lift = bg === "#000000" ? [.07, .11, .16] : [.055, .095, .14];
+    r.setProperty("--night", bg); r.setProperty("--ink", bg);
+    r.setProperty("--panel", mixHex(bg, "#ffffff", lift[0])); r.setProperty("--panel-2", mixHex(bg, "#ffffff", lift[1])); r.setProperty("--panel-3", mixHex(bg, "#ffffff", lift[2]));
+  }
+  renderSwatches();
+}
+function swatchSet(box, list, val, onPick){
+  if (!box) return;
+  const preset = list.some(x => x[1] === val);
+  box.innerHTML = list.map(([n, c]) => `<button type="button" class="sw" role="radio" aria-checked="${c === val}" aria-label="${n}" title="${n}" style="--c:${c}" data-c="${c}"></button>`).join("")
+    + `<label class="sw custom" role="radio" aria-checked="${!preset}" title="Your own colour" style="--c:${val}"><input type="color" value="${val}" aria-label="Choose your own colour"></label>`;
+  box.querySelectorAll("button.sw").forEach(b => b.onclick = () => { onPick(b.dataset.c); b.blur(); });
+  const inp = box.querySelector("input"); inp.oninput = () => onPick(inp.value.toLowerCase());
+}
+function markSwatches(box, list, val){
+  if (!box) return;
+  const preset = list.some(x => x[1] === val);
+  box.querySelectorAll(".sw").forEach(sw => {
+    const custom = sw.classList.contains("custom");
+    sw.setAttribute("aria-checked", String(custom ? !preset : sw.dataset.c === val));
+    if (custom) sw.style.setProperty("--c", val);
+  });
+}
+function renderSwatches(){
+  const a = isHex(S.accent) ? S.accent.toLowerCase() : "#ffa53a", bg = isHex(S.bg) ? S.bg.toLowerCase() : "#0e0f11";
+  const pickA = c => { S.accent = c; saveSettings(); applyColours(); }, pickB = c => { S.bg = c; saveSettings(); applyColours(); };
+  // keep the colour picker element alive while it's being dragged, just update the marks
+  if ($("#accentSw") && $("#accentSw").children.length) markSwatches($("#accentSw"), ACCENTS, a); else swatchSet($("#accentSw"), ACCENTS, a, pickA);
+  if ($("#bgSw") && $("#bgSw").children.length) markSwatches($("#bgSw"), BGS, bg); else swatchSet($("#bgSw"), BGS, bg, pickB);
+}
+try { new MutationObserver(applyColours).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] }); } catch {}
+applyColours();
+
 /* ---------------- settings sections ---------------- */
 (function groupSettings(){
   const box = document.querySelector(".settings"); if (!box) return;
@@ -4817,7 +4883,7 @@ setBoard(!!S.board);
     return i < 0 ? null : rows.splice(i, 1)[0];
   };
   const groups = [
-    ["general", "General", [[null, ["Updates", "Appearance", "Controls"]], ["Performance", ["#gpuRow", "Ambient glow"]]]],
+    ["general", "General", [[null, ["Updates", "Appearance", "Controls"]], ["Colours", ["Accent colour", "Background"]], ["Performance", ["#gpuRow", "Ambient glow"]]]],
     ["playback", "Playback", [[null, ["Skip interval", "Default speed", "Resume where", "Play next"]], ["Links and torrents", ["#streamCacheRow", "Show torrent stats"]]]],
     ["subs", "Subtitles", [[null, ["Turn on English", "One-liner"]], ["Look", ["#subStyleCard", "Subtitle font"]], ["Subtitle files", ["#sidecarRow", "#saveSubsRow"]], ["Downloading", ["#subAcctCard"]]]],
     ["shots", "Screenshots and clips", [[null, ["Shots mode", "Screenshot format", "Subtitles in screenshots"]], ["Saving", ["Save shots to a folder", "Save locations"]], ["Logos", ["#logoCard"]]]],
