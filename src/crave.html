@@ -1772,18 +1772,20 @@ function saveProgress(ended){
   e.pos = ended ? 0 : v.currentTime; e.dur = v.duration; e.updated = Date.now();
   saveThumb(e.id); saveLib();
 }
-// a small still of where you are, for Home (kept for the 40 most recent videos, separate from your shots)
-let thumbs = store.get("thumbs", {}), thumbAt = {};
+// a full-size still of where you are, for Home (the desktop app keeps them as files; separate from your shots)
+let thumbs = store.get("thumbs", {}), thumbAt = {}, thumbCache = {};
 function saveThumb(id, force){
   try {
     if (tainted || !v.videoWidth || v.readyState < 2) return;
-    if (!force && Date.now() - (thumbAt[id] || 0) < 20000) return;
+    if (!force && Date.now() - (thumbAt[id] || 0) < 60000) return;
     thumbAt[id] = Date.now();
-    const w = 480, h = Math.round(w * v.videoHeight / v.videoWidth), c = document.createElement("canvas");
-    c.width = w; c.height = h; c.getContext("2d").drawImage(v, 0, 0, w, h);
-    thumbs[id] = { u: c.toDataURL("image/jpeg", 0.72), t: Date.now() };
-    const keep = Object.entries(thumbs).sort((a, b) => b[1].t - a[1].t).slice(0, 40);
-    thumbs = Object.fromEntries(keep); store.set("thumbs", thumbs);
+    const full = !!(N && N.thumbSave), w = full ? v.videoWidth : Math.min(960, v.videoWidth), h = Math.round(w * v.videoHeight / v.videoWidth);
+    const c = document.createElement("canvas"); c.width = w; c.height = h; c.getContext("2d").drawImage(v, 0, 0, w, h);
+    const url = c.toDataURL("image/jpeg", full ? 0.92 : 0.82);
+    thumbCache[id] = url;
+    if (full) { N.thumbSave(id, url); return; }
+    thumbs[id] = { u: url, t: Date.now() };
+    thumbs = Object.fromEntries(Object.entries(thumbs).sort((a, b) => b[1].t - a[1].t).slice(0, 16)); store.set("thumbs", thumbs);
   } catch {}
 }
 window.addEventListener("pagehide", () => saveProgress());
@@ -4723,7 +4725,17 @@ function playEntry(e, at){
 const looksLikeLink = q => /^(https?:|magnet:|ftp:|file:|[a-z]:\\|\/)/i.test(q) || /\.(mp4|mkv|m3u8|mpd|webm|mov|avi|torrent)(\?|$)/i.test(q);
 let homeUrls = [];
 const shotUrlFor = s => { const u = URL.createObjectURL(s.blob); homeUrls.push(u); return u; };
-const thumbOf = id => (thumbs[id] || {}).u || "";
+const thumbOf = id => thumbCache[id] || (thumbs[id] || {}).u || "";
+const thumbAsked = {};
+function fillThumb(e, img){
+  // img: the element to fill in when the picture arrives
+  if (!N || !N.thumbGet || thumbAsked[e.id]) return;
+  thumbAsked[e.id] = true;
+  N.thumbGet(e.id, e.path || e.url || "", e.pos > 5 ? e.pos : Math.min(120, (e.dur || 600) * 0.1)).then(u => {
+    if (!u) return; thumbCache[e.id] = u;
+    homeDirty = true; renderHome(true);
+  }).catch(() => {});
+}
 const showName = n => String(n || "").replace(/\.(mp4|m4v|mkv|webm|mov|avi|wmv|flv|ts|m2ts|mpg|mpeg|torrent)$/i, "");
 function renderHome(force){
   if (!document.body.classList.contains("po") || !stage.classList.contains("is-empty")) { homeDirty = true; return; }
@@ -4746,6 +4758,7 @@ function renderHome(force){
       <div class="hero-a"><button class="btn primary" data-h="resume"><svg class="i"><use href="#i-play"/></svg>Resume at ${fmt(hero.pos)}</button>
         <button class="btn" data-h="over">Start over</button>
         ${hero.dur ? `<span class="hero-p" aria-label="${Math.round(pct)}% watched"><i style="width:${pct}%"></i></span><span class="hero-l">${fmt(hero.dur - hero.pos)} left</span>` : ""}</div>`;
+    if (!th) fillThumb(hero);
     heroEl.querySelector('[data-h="resume"]').onclick = () => playEntry(hero, hero.pos);
     heroEl.querySelector('[data-h="over"]').onclick = () => playEntry(hero, 0);
   } else {
@@ -4766,6 +4779,7 @@ function renderHome(force){
     b.innerHTML = `<span class="th">${th ? `<img alt="" loading="lazy" src="${th}">` : `<span>${esc((e.name || "?").trim()[0] || "?")}</span>`}${pct ? `<i style="width:${pct}%"></i>` : ""}</span>
       <span class="n">${esc(showName(e.name))}</span><span class="s">${e.dur && e.pos > 5 ? fmt(e.dur - e.pos) + " left" : KIND_LABEL[e.kind] || ""}</span>`;
     b.onclick = () => playEntry(e);
+    if (!th) fillThumb(e);
     rr.appendChild(b);
   });
   $("#homeShots").hidden = true;

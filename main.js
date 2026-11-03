@@ -347,6 +347,47 @@ ipcMain.handle("stream-open", async (_e, url) => { try { const c = streamCache()
 ipcMain.handle("stream-close-all", () => { if (scache) scache.closeAll(); });
 ipcMain.handle("stream-stats", (_e, id) => scache ? scache.stats(id) : null);
 const netIn = input => /^https?:/i.test(String(input || "")) ? ["-user_agent", NET_UA, "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_on_network_error", "1", "-reconnect_on_http_error", "5xx", "-reconnect_delay_max", "8", "-rw_timeout", "30000000"] : [];
+/* ---------- Home pictures: a full-size still of each video, kept on disk ---------- */
+const thumbDir = () => path.join(app.getPath("userData"), "thumbs");
+const thumbFile = id => path.join(thumbDir(), String(id).replace(/[^a-z0-9_-]/gi, "_").slice(0, 120) + ".jpg");
+const thumbData = async f => "data:image/jpeg;base64," + (await fs.promises.readFile(f)).toString("base64");
+function pruneThumbs(){
+  try {
+    const all = fs.readdirSync(thumbDir()).map(n => { const f = path.join(thumbDir(), n); return { f, t: fs.statSync(f).mtimeMs }; }).sort((a, b) => b.t - a.t);
+    all.slice(80).forEach(x => fs.rm(x.f, { force: true }, () => {}));
+  } catch {}
+}
+ipcMain.handle("thumb-save", async (_e, id, dataUrl) => {
+  try {
+    const b64 = String(dataUrl || "").split(",")[1]; if (!id || !b64) return false;
+    fs.mkdirSync(thumbDir(), { recursive: true });
+    await fs.promises.writeFile(thumbFile(id), Buffer.from(b64, "base64")); pruneThumbs(); return true;
+  } catch { return false; }
+});
+const thumbJobs = new Map();
+ipcMain.handle("thumb-get", async (_e, id, src, at) => {
+  if (!id) return null;
+  const f = thumbFile(id);
+  try { if (fs.existsSync(f) && fs.statSync(f).size > 0) return await thumbData(f); } catch {}
+  src = String(src || "");
+  if (!src || /^(magnet:|blob:|data:)/i.test(src)) return null;
+  if (!/^https?:/i.test(src) && !fs.existsSync(src)) return null;
+  if (thumbJobs.has(id)) return thumbJobs.get(id);
+  const job = new Promise(resolve => {
+    try { fs.mkdirSync(thumbDir(), { recursive: true }); } catch {}
+    const tmp = f + ".part.jpg";
+    const p = spawn(ffmpegPath(), ["-hide_banner", "-nostdin", "-loglevel", "error", "-ss", String(Math.max(0, +at || 0)), ...netIn(src), "-i", src,
+      "-frames:v", "1", "-q:v", "2", "-y", tmp], { windowsHide: true });
+    const kill = setTimeout(() => { try { p.kill(); } catch {} }, 25000);
+    p.on("error", () => { clearTimeout(kill); resolve(null); });
+    p.on("close", async code => {
+      clearTimeout(kill);
+      try { if (code === 0 && fs.statSync(tmp).size > 0) { fs.renameSync(tmp, f); pruneThumbs(); resolve(await thumbData(f)); return; } } catch {}
+      fs.rm(tmp, { force: true }, () => {}); resolve(null);
+    });
+  }).finally(() => thumbJobs.delete(id));
+  thumbJobs.set(id, job); return job;
+});
 /* ---------- appearance: Windows title bar and window colour follow the app's light/dark choice ---------- */
 const themeFile = () => path.join(app.getPath("userData"), "theme.json");
 // The Windows title bar follows nativeTheme, so set it from the saved choice before the window appears.

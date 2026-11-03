@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld("craveNative", {
   torrentStop: () => ipcRenderer.invoke("torrent-stop"),
   openShotsFolder: () => ipcRenderer.invoke("open-shots-folder"),
   foldersGet: () => ipcRenderer.invoke("folders-get"),
+  thumbSave: (id, dataUrl) => ipcRenderer.invoke("thumb-save", id, dataUrl),
+  thumbGet: (id, src, at) => ipcRenderer.invoke("thumb-get", id, src, at),
   logosList: () => ipcRenderer.invoke("logos-list"),
   logosAdd: o => ipcRenderer.invoke("logos-add", o),
   logosRename: o => ipcRenderer.invoke("logos-rename", o),
