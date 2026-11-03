@@ -1000,7 +1000,8 @@ html[data-theme="light"] .home-hero:not(.welcome) .btn.primary{background:#eceef
 .hcard .th i{background:#fff!important;box-shadow:0 0 4px rgba(0,0,0,.5)}
 #homeBtn svg.i{width:21px;height:21px}
 button.brand{border:0;background:none;padding:0;cursor:pointer;color:inherit}
-/* Control bar: navigate, then play, then the title, then the things you use while watching.
+/* Control bar: navigate, then play, then the things you use while watching.
+   The title sits across the top of the picture.
    Frame step shows only while paused (that is when you hold it). Shot board, HDR,
    picture in picture and the side panel live under More; their keys still work. */
 .cluster{display:flex;align-items:center;gap:2px;flex:none;min-width:0}
@@ -1018,10 +1019,11 @@ html[data-theme="light"] .stage.bar-below:not(.is-empty) .hud .cb.play{backgroun
 .hud-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:600 14px/1.2 var(--f-head);letter-spacing:-.015em;color:rgba(255,255,255,.9)}
 .hud-mid .hdr-chip{flex:none;background:rgba(255,255,255,.16);color:#fff}
 .parked{display:none!important}
-/* The name lives in the control bar. The old strip across the top of the picture stays off, including in full screen. */
-.titlebar{display:none}
-body:not(.po) .hud-mid{display:none}
-body:not(.po) .cluster.session{margin-left:auto}
+/* The name sits across the top of the picture, and stays there while the bar is pinned below. Full screen fades it with the controls. */
+.hud-mid{display:none}
+.cluster.session{margin-left:auto}
+.stage:not(.is-empty) .titlebar{display:flex;z-index:4}
+.stage.bar-below.idle .titlebar{opacity:1}
 html[data-theme="light"] .stage.bar-below:not(.is-empty) .hud-title{color:#1d1d1f}
 html[data-theme="light"] .stage.bar-below:not(.is-empty) .vdiv{background:rgba(20,22,43,.16)}
 html[data-theme="light"] .stage.bar-below:not(.is-empty) .hud .cb.play:hover{filter:none;background:#000}
