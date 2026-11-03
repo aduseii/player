@@ -1139,7 +1139,7 @@ html[data-look="tv"] .tab[aria-selected="true"] .count{color:color-mix(in srgb,v
               </header>
               <section class="home-hero" id="homeHero"></section>
               <section class="home-shelf" id="homeRecent"><div class="hs-head"><h2 id="homeRecentH">Recently opened</h2></div><div class="home-row" id="homeRecentRow"></div></section>
-              <section class="home-shelf" id="homeShots"><div class="hs-head"><h2>Your shots</h2><button class="linkbtn" id="homeAllShots">See all</button></div><div class="home-shots" id="homeShotRow"></div></section>
+              <section class="home-shelf" id="homeShots" hidden><button class="linkbtn" id="homeAllShots" hidden></button><div id="homeShotRow"></div></section>
             </div>
           </div>
           <div class="titlebar"><div class="tmeta"><span class="t" id="stageTitle"></span><span class="chips"><span class="kind-chip" id="stageKind" hidden></span><span class="kind-chip hdr-chip" id="hdrChip" hidden></span></span></div><button class="tb-btn" id="closeBtn" title="Close video"><svg class="i"><use href="#i-x"/></svg></button></div>
@@ -1769,7 +1769,22 @@ v.addEventListener("progress", renderBuffered);
 function saveProgress(ended){
   if (!cur || !isFinite(v.duration) || !v.duration) return;
   const e = lib(cur.id); if (!e) return;
-  e.pos = ended ? 0 : v.currentTime; e.dur = v.duration; e.updated = Date.now(); saveLib();
+  e.pos = ended ? 0 : v.currentTime; e.dur = v.duration; e.updated = Date.now();
+  saveThumb(e.id); saveLib();
+}
+// a small still of where you are, for Home (kept for the 40 most recent videos, separate from your shots)
+let thumbs = store.get("thumbs", {}), thumbAt = {};
+function saveThumb(id, force){
+  try {
+    if (tainted || !v.videoWidth || v.readyState < 2) return;
+    if (!force && Date.now() - (thumbAt[id] || 0) < 20000) return;
+    thumbAt[id] = Date.now();
+    const w = 480, h = Math.round(w * v.videoHeight / v.videoWidth), c = document.createElement("canvas");
+    c.width = w; c.height = h; c.getContext("2d").drawImage(v, 0, 0, w, h);
+    thumbs[id] = { u: c.toDataURL("image/jpeg", 0.72), t: Date.now() };
+    const keep = Object.entries(thumbs).sort((a, b) => b[1].t - a[1].t).slice(0, 40);
+    thumbs = Object.fromEntries(keep); store.set("thumbs", thumbs);
+  } catch {}
 }
 window.addEventListener("pagehide", () => saveProgress());
 document.addEventListener("visibilitychange", () => { if (document.hidden) saveProgress(); });
@@ -1996,6 +2011,7 @@ $("#copyLinkBtn").onclick = () => {
 function stop(){
   toggleDrawer(false);
   if (N && N.streamCloseAll) N.streamCloseAll();
+  if (cur) saveThumb(cur.id, true);
   saveProgress(); teardown(); cur = null;
   $("#empty").hidden = false; $("#stage").classList.add("is-empty"); $("#hud").hidden = true; $("#nowbar").hidden = true; $("#spinner").hidden = true;
   $("#stageTitle").textContent = ""; $("#stageKind").hidden = true;
@@ -4707,7 +4723,7 @@ function playEntry(e, at){
 const looksLikeLink = q => /^(https?:|magnet:|ftp:|file:|[a-z]:\\|\/)/i.test(q) || /\.(mp4|mkv|m3u8|mpd|webm|mov|avi|torrent)(\?|$)/i.test(q);
 let homeUrls = [];
 const shotUrlFor = s => { const u = URL.createObjectURL(s.blob); homeUrls.push(u); return u; };
-const lastShotOf = id => shotsMem.find(s => s.srcId === id);
+const thumbOf = id => (thumbs[id] || {}).u || "";
 const showName = n => String(n || "").replace(/\.(mp4|m4v|mkv|webm|mov|avi|wmv|flv|ts|m2ts|mpg|mpeg|torrent)$/i, "");
 function renderHome(force){
   if (!document.body.classList.contains("po") || !stage.classList.contains("is-empty")) { homeDirty = true; return; }
@@ -4722,9 +4738,9 @@ function renderHome(force){
   if (searching) heroEl.hidden = true;
   else if (hero) {
     heroEl.hidden = false;
-    const shot = lastShotOf(hero.id), pct = hero.dur ? Math.min(100, hero.pos / hero.dur * 100) : 0;
+    const th = thumbOf(hero.id), pct = hero.dur ? Math.min(100, hero.pos / hero.dur * 100) : 0;
     heroEl.className = "home-hero";
-    heroEl.innerHTML = `${shot ? `<img alt="" src="${shotUrlFor(shot)}">` : ""}<div class="shade"></div>
+    heroEl.innerHTML = `${th ? `<img alt="" src="${th}">` : ""}<div class="shade"></div>
       <div class="hero-k">Continue watching</div>
       <h1 class="hero-t">${esc(showName(hero.name))}</h1>
       <div class="hero-a"><button class="btn primary" data-h="resume"><svg class="i"><use href="#i-play"/></svg>Resume at ${fmt(hero.pos)}</button>
@@ -4745,23 +4761,14 @@ function renderHome(force){
   $("#homeRecent").hidden = !searching && !rows.length;
   const rr = $("#homeRecentRow"); rr.innerHTML = "";
   rows.forEach(e => {
-    const shot = lastShotOf(e.id), pct = e.dur ? Math.min(100, e.pos / e.dur * 100) : 0;
+    const th = thumbOf(e.id), pct = e.dur ? Math.min(100, e.pos / e.dur * 100) : 0;
     const b = document.createElement("button"); b.className = "hcard"; b.title = e.pos > 5 ? "Resume " + e.name : "Play " + e.name;
-    b.innerHTML = `<span class="th">${shot ? `<img alt="" loading="lazy" src="${shotUrlFor(shot)}">` : `<span>${esc((e.name || "?").trim()[0] || "?")}</span>`}${pct ? `<i style="width:${pct}%"></i>` : ""}</span>
+    b.innerHTML = `<span class="th">${th ? `<img alt="" loading="lazy" src="${th}">` : `<span>${esc((e.name || "?").trim()[0] || "?")}</span>`}${pct ? `<i style="width:${pct}%"></i>` : ""}</span>
       <span class="n">${esc(showName(e.name))}</span><span class="s">${e.dur && e.pos > 5 ? fmt(e.dur - e.pos) + " left" : KIND_LABEL[e.kind] || ""}</span>`;
     b.onclick = () => playEntry(e);
     rr.appendChild(b);
   });
-  const shots = searching ? [] : shotsMem.slice(0, 16);
-  $("#homeShots").hidden = !shots.length;
-  $("#homeAllShots").textContent = "See all " + shotsMem.length;
-  const sr = $("#homeShotRow"); sr.innerHTML = "";
-  shots.forEach(s => {
-    const u = shotUrlFor(s), b = document.createElement("button");
-    b.title = s.name + " at " + fmt(s.t); b.innerHTML = `<img alt="Frame at ${fmt(s.t)} from ${esc(s.name)}" loading="lazy" src="${u}">`;
-    b.onclick = () => openLightbox(s, u);
-    sr.appendChild(b);
-  });
+  $("#homeShots").hidden = true;
 }
 $("#homeOpen").onclick = () => $("#fileInput").click();
 $("#homeApp").onclick = () => { setPlayerMode(false); switchView("library"); };
