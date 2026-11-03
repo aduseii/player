@@ -1008,11 +1008,18 @@ button.brand{border:0;background:none;padding:0;cursor:pointer;color:inherit}
 .cluster.nav .cb{opacity:.72}
 .cluster.nav .cb:hover,.cluster.nav .cb[aria-pressed="true"]{opacity:1}
 .vdiv{width:1px;height:18px;margin:0 6px;background:rgba(255,255,255,.18);flex:none}
-.hud .cb.play{width:44px;height:44px;margin:0 2px;padding:0;border-radius:50%;background:var(--honey);color:var(--honey-ink);justify-content:center;flex:none;opacity:1}
-html[data-theme="light"] .stage.bar-below:not(.is-empty) .hud .cb.play{background:var(--honey);color:var(--honey-ink)}
-.hud .cb.play svg.i{width:18px;height:18px}
-.stage.paused .hud .cb.play svg.i{transform:translateX(1.5px)}
-.hud .cb.play:hover{background:var(--honey);filter:brightness(1.08);opacity:1}
+.hud .cb{color:rgba(255,255,255,.72);border-radius:999px;opacity:1}
+.hud .cb svg.i{width:20px;height:20px;stroke-width:1.4}
+.hud .cb:hover{background:rgba(255,255,255,.1);color:rgba(255,255,255,.95)}
+.hud .cb.on{color:var(--honey)}
+.hud .cb.on:hover{background:rgba(255,255,255,.1)}
+.hud .cluster.nav .cb{color:rgba(255,255,255,.48)}
+.hud .cluster.nav .cb:hover{color:rgba(255,255,255,.9)}
+.hud .speed-sel{color:rgba(255,255,255,.72);font-weight:500}
+.hud .cb.play{width:42px;height:42px;margin:0 2px;padding:0;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;justify-content:center;flex:none;opacity:1;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.22),0 8px 18px rgba(0,0,0,.16);backdrop-filter:blur(16px)}
+.hud .cb.play svg.i{width:16px;height:16px;stroke-width:1.6}
+.stage.paused .hud .cb.play svg.i{transform:translateX(1px)}
+.hud .cb.play:hover{background:rgba(255,255,255,.22);filter:none;color:#fff}
 .frame-btn{display:none}
 .stage.paused .frame-btn{display:inline-flex}
 .hud-mid{flex:1;min-width:0;display:flex;align-items:center;gap:8px;margin:0 16px}
@@ -1026,7 +1033,11 @@ html[data-theme="light"] .stage.bar-below:not(.is-empty) .hud .cb.play{backgroun
 .stage.bar-below.idle .titlebar{opacity:1}
 html[data-theme="light"] .stage.bar-below:not(.is-empty) .hud-title{color:#1d1d1f}
 html[data-theme="light"] .stage.bar-below:not(.is-empty) .vdiv{background:rgba(20,22,43,.16)}
-html[data-theme="light"] .stage.bar-below:not(.is-empty) .hud .cb.play:hover{filter:none;background:#000}
+html[data-theme="light"] .stage.bar-below:not(.is-empty) .hud .cb:not(.on):not(.play),
+html[data-theme="light"] .stage.bar-below:not(.is-empty) .hud .speed-sel{color:rgba(20,22,43,.58)}
+html[data-theme="light"] .stage.bar-below:not(.is-empty) .hud .cb:not(.play):hover{background:rgba(20,22,43,.06);color:rgba(20,22,43,.86)}
+html[data-theme="light"] .stage.bar-below:not(.is-empty) .hud .cb.play{background:rgba(20,22,43,.78);color:#fff;box-shadow:0 8px 18px rgba(20,22,43,.1)}
+html[data-theme="light"] .stage.bar-below:not(.is-empty) .hud .cb.play:hover{filter:none;background:rgba(20,22,43,.9);color:#fff}
 html[data-theme="light"] .stage.bar-below:not(.is-empty) .hud-mid .hdr-chip{background:rgba(20,22,43,.08);color:#1d1d1f}
 @container (max-width: 860px){
   .hud-mid{display:none}
