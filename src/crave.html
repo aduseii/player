@@ -1018,8 +1018,8 @@ html[data-theme="light"] .stage.bar-below:not(.is-empty) .hud .cb.play{backgroun
 .hud-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:600 14px/1.2 var(--f-head);letter-spacing:-.015em;color:rgba(255,255,255,.9)}
 .hud-mid .hdr-chip{flex:none;background:rgba(255,255,255,.16);color:#fff}
 .parked{display:none!important}
-.stage:fullscreen .hud-mid{display:none}
-.stage:fullscreen .cluster.session{margin-left:auto}
+/* The name lives in the control bar. The old strip across the top of the picture stays off, including in full screen. */
+.titlebar{display:none}
 body:not(.po) .hud-mid{display:none}
 body:not(.po) .cluster.session{margin-left:auto}
 html[data-theme="light"] .stage.bar-below:not(.is-empty) .hud-title{color:#1d1d1f}
