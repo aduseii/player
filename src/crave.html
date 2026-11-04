@@ -1037,8 +1037,22 @@ html[data-look="tv"] .tab[aria-selected="true"] .count{color:color-mix(in srgb,v
 .brand,.home-brand,.po-brand{text-transform:lowercase}
 /* cleaner bar: frame steps only while paused */
 .stage:not(.paused) .frame-btn{display:none}
-.ctrls{position:relative}
-body:not(.po) @media (max-width:980px){ </style>
+/* find a line */
+.findbar{position:absolute;top:16px;left:50%;transform:translateX(-50%);width:min(620px,calc(100% - 32px));max-height:calc(100% - var(--bar,0px) - 40px);display:flex;flex-direction:column;z-index:9;border-radius:14px;background:color-mix(in srgb,var(--panel) 96%,transparent);backdrop-filter:blur(24px);box-shadow:0 0 0 .5px rgba(255,255,255,.1),0 24px 60px rgba(0,0,0,.55);color:#eceef2;overflow:hidden}
+.findbar[hidden]{display:none}
+.fb-top{display:flex;align-items:center;gap:10px;padding:0 8px 0 14px;height:52px;flex:none;border-bottom:.5px solid rgba(255,255,255,.08)}
+.fb-top svg.i{width:18px;height:18px;opacity:.6;flex:none}
+.fb-top input{flex:1;min-width:0;border:0;background:none;outline:none;color:inherit;font:15px var(--f-ui)}
+.fb-top input::placeholder{color:rgba(236,238,242,.5)}
+.fb-count{font:500 12.5px var(--f-ui);color:rgba(236,238,242,.55);white-space:nowrap;font-variant-numeric:tabular-nums}
+.fb-list{overflow-y:auto;padding:6px;min-height:0}
+.fb-hit{width:100%;display:flex;gap:14px;align-items:baseline;text-align:left;border:0;border-radius:9px;padding:10px 10px;background:transparent;color:inherit;font:14px/1.45 var(--f-ui);cursor:pointer}
+.fb-hit[aria-selected="true"]{background:rgba(255,255,255,.08)}
+.fb-t{flex:none;width:58px;font:600 12.5px var(--f-ui);color:var(--a);font-variant-numeric:tabular-nums}
+.fb-x{flex:1;min-width:0}
+.fb-x mark{background:color-mix(in srgb,var(--a) 30%,transparent);color:inherit;border-radius:3px;padding:0 1px}
+.fb-empty{margin:0;padding:14px 12px;color:rgba(236,238,242,.6);font-size:13.5px;line-height:1.45}
+</style>
 </head>
 <body>
 
@@ -1158,6 +1172,15 @@ body:not(.po) @media (max-width:980px){ </style>
           <div class="banners" id="banners"></div>
           <div class="menu" id="menu" hidden></div>
           <div class="menu" id="clipPanel" hidden></div>
+          <div class="findbar" id="findBar" hidden role="dialog" aria-label="Find a line">
+            <div class="fb-top">
+              <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>
+              <input id="findQ" type="text" spellcheck="false" autocomplete="off" placeholder="Find a line, or type a time like 12:30" aria-label="Find a line in the subtitles, or a time to jump to">
+              <span class="fb-count" id="findCount"></span>
+              <button class="iconbtn" id="findClose" title="Close (Esc)" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button>
+            </div>
+            <div class="fb-list" id="findList" role="listbox"></div>
+          </div>
 
           <div class="hud" id="hud" hidden>
             <div class="scrub">
@@ -1386,6 +1409,7 @@ body:not(.po) @media (max-width:980px){ </style>
     <kbd>↑ ↓</kbd><span>Volume</span>
     <kbd>[ ]</kbd><span>Slower / faster</span>
     <kbd>0–9</kbd><span>Jump to 0%–90%</span>
+    <kbd>Ctrl F</kbd><span>Find a line in the subtitles and jump to it</span>
     <kbd>B</kbd><span>Mark this moment</span>
     <kbd>X</kbd><span>Clip mode on / off</span>
     <kbd>Q</kbd><span>Side panel: Up next, marks, source</span>
@@ -4570,7 +4594,7 @@ function renderMenu(){
       h += `<button class="mi" data-sub="${i}" ${usable(s) ? "" : "disabled"}>${ck(i === activeSub)}<span><span class="a">${esc(s.label)}</span><span class="b">${esc(st)}</span></span></button>`;
     });
     if (!subs.length) h += `<p class="note">${cur && cur.probing ? "Checking this file for built-in subtitles…" : cur && cur.kind === "file" ? "This file has no built-in subtitles." : "Built-in subtitles are read from files on your computer. For links, load a subtitle file."}</p>`;
-    h += `<div class="sep"></div>${N && N.subsSearch ? `<button class="mi" data-act="search">${ck(false)}<span><span class="a">Search online…</span><span class="b">OpenSubtitles.com and SubDL</span></span></button>` : ""}<button class="mi" data-act="oneliner">${ck(!!S.oneLiner)}<span><span class="a">One-liner</span><span class="b">One line at a time, one speaker each (T)</span></span></button><button class="mi" data-act="shots">${ck(!!S.shotsMode)}<span><span class="a">Shots mode</span><span class="b">4:5 shots: drag the frame, subtitles fit inside (Y)</span></span></button><button class="mi" data-act="style">${ck(false)}<span><span class="a">Subtitle style…</span><span class="b">Colour, background, opacity, size</span></span></button><button class="mi" data-act="load">${ck(false)}<span><span class="a">Load subtitle file…</span><span class="b">.srt, .vtt, .ass or .ssa</span></span></button>`;
+    h += `<div class="sep"></div>${N && N.subsSearch ? `<button class="mi" data-act="search">${ck(false)}<span><span class="a">Search online…</span><span class="b">OpenSubtitles.com and SubDL</span></span></button>` : ""}${activeSub >= 0 ? `<button class="mi" data-act="find">${ck(false)}<span><span class="a">Find a line…</span><span class="b">Search what's said and jump to it (Ctrl F)</span></span></button>` : ""}<button class="mi" data-act="oneliner">${ck(!!S.oneLiner)}<span><span class="a">One-liner</span><span class="b">One line at a time, one speaker each (T)</span></span></button><button class="mi" data-act="shots">${ck(!!S.shotsMode)}<span><span class="a">Shots mode</span><span class="b">4:5 shots: drag the frame, subtitles fit inside (Y)</span></span></button><button class="mi" data-act="style">${ck(false)}<span><span class="a">Subtitle style…</span><span class="b">Colour, background, opacity, size</span></span></button><button class="mi" data-act="load">${ck(false)}<span><span class="a">Load subtitle file…</span><span class="b">.srt, .vtt, .ass or .ssa</span></span></button>`;
     if (activeSub >= 0) h += `<div class="delay"><span style="flex:1">Timing <span class="mono" style="color:var(--honey)">${fmtOff(subs[activeSub].offset)}</span></span><button class="btn sm" data-d="-0.5">Earlier</button><button class="btn sm" data-d="0.5">Later</button></div>${N && N.subsSync && subs[activeSub].tt ? `<button class="mi" data-act="sync" ${syncing ? "disabled" : ""}>${ck(false)}<span><span class="a">${syncing ? "Syncing…" : "Sync to speech"}</span><span class="b">Lines the subtitles up with the dialogue automatically</span></span></button>` : ""}<p class="note" style="padding-top:0">G and H nudge by 0.1 s.</p>`;
     m.innerHTML = h;
     m.querySelectorAll("[data-sub]").forEach(b => b.onclick = () => selectSub(+b.dataset.sub));
@@ -4578,6 +4602,7 @@ function renderMenu(){
     const sb = m.querySelector('[data-act="search"]'); if (sb) sb.onclick = () => { closeMenu(); openSubSearch(); };
     m.querySelector('[data-act="oneliner"]').onclick = () => setOneLiner(!S.oneLiner);
     m.querySelector('[data-act="shots"]').onclick = () => setShotsMode(!S.shotsMode);
+    const fl = m.querySelector('[data-act="find"]'); if (fl) fl.onclick = () => { closeMenu(); openFind(); };
     m.querySelector('[data-act="style"]').onclick = () => { closeMenu(); if (!v.paused) v.pause(); switchView("settings"); $("#subStyleCard").scrollIntoView({ behavior: "smooth", block: "start" }); };
     m.querySelectorAll("[data-d]").forEach(b => b.onclick = () => shiftSub(+b.dataset.d));
     const sy = m.querySelector('[data-act="sync"]'); if (sy) sy.onclick = () => syncSub();
@@ -4897,6 +4922,85 @@ function renderSwatches(){
 }
 try { new MutationObserver(applyColours).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] }); } catch {}
 applyColours();
+
+/* ---------------- find a line: search the subtitles, jump to when it's said ---------------- */
+const findNorm = t => String(t || "").replace(/<[^>]*>|\{[^}]*\}/g, " ").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[’‘`]/g, "'").replace(/[^a-z0-9' ]+/g, " ").replace(/\s+/g, " ").trim();
+const cueText = c => String(c.text || "").replace(/<[^>]*>|\{[^}]*\}/g, "").replace(/\s*\n\s*/g, " ").trim();
+let findSel = 0, findHits = [];
+function parseTimeQuery(q){
+  const m = /^\s*(?:(\d{1,2}):)?(\d{1,3}):(\d{2})(?:[.,](\d+))?\s*$/.exec(q); if (!m) return null;
+  return (+(m[1] || 0)) * 3600 + (+m[2]) * 60 + (+m[3]) + (m[4] ? +("0." + m[4]) : 0);
+}
+function highlight(text, words){
+  let h = esc(text);
+  for (const w of words.slice().sort((a, b) => b.length - a.length)) {
+    if (w.length < 2) continue;
+    h = h.replace(new RegExp("(" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/'/g, "['’]") + ")", "gi"), "\u0001$1\u0002");
+  }
+  return h.replace(/\u0001/g, "<mark>").replace(/\u0002/g, "</mark>");
+}
+function runFind(){
+  const q = $("#findQ").value, list = $("#findList"), count = $("#findCount");
+  const e = subs[activeSub];
+  findHits = []; findSel = 0;
+  if (!e || !e.tt || !e.tt.cues || !e.tt.cues.length) {
+    list.innerHTML = `<p class="fb-empty">${activeSub < 0 ? "Turn on subtitles first (C), then search what's said." : "The subtitles are still loading. Try again in a moment."}</p>`;
+    count.textContent = ""; return;
+  }
+  const at = parseTimeQuery(q);
+  if (at != null) findHits.push({ t: at, time: true });
+  const words = findNorm(q).split(" ").filter(Boolean);
+  if (words.length) {
+    const phrase = findNorm(q);
+    const cues = [...e.tt.cues].sort((a, b) => a.startTime - b.startTime);
+    for (const c of cues) {
+      const n = findNorm(c.text);
+      if (!words.every(w => n.includes(w))) continue;
+      findHits.push({ t: c.startTime, text: cueText(c), exact: n.includes(phrase) });
+      if (findHits.length >= 300) break;
+    }
+    // whole-phrase matches first, then the rest, each in time order
+    const lead = findHits.filter(h => h.time), rest = findHits.filter(h => !h.time);
+    findHits = lead.concat(rest.filter(h => h.exact), rest.filter(h => !h.exact));
+  }
+  if (!q.trim()) { list.innerHTML = `<p class="fb-empty">Type a few words you remember from the line, or a time like 1:02:30.</p>`; count.textContent = e.tt.cues.length + " lines"; return; }
+  if (!findHits.length) { list.innerHTML = `<p class="fb-empty">No line says “${esc(q.trim())}”. Try fewer or different words.</p>`; count.textContent = "0"; return; }
+  const n = findHits.filter(h => !h.time).length;
+  count.textContent = n ? n + (n === 1 ? " line" : " lines") : "";
+  list.innerHTML = findHits.map((h, i) => h.time
+    ? `<button class="fb-hit" role="option" data-i="${i}"><span class="fb-t">${fmt(h.t)}</span><span class="fb-x">Jump to ${fmt(h.t)}</span></button>`
+    : `<button class="fb-hit" role="option" data-i="${i}"><span class="fb-t">${fmt(h.t)}</span><span class="fb-x">${highlight(h.text, words)}</span></button>`).join("");
+  list.querySelectorAll(".fb-hit").forEach(b => { b.onclick = () => { findSel = +b.dataset.i; findJump(); }; b.onmousemove = () => { if (findSel !== +b.dataset.i) { findSel = +b.dataset.i; markFind(); } }; });
+  markFind();
+}
+function markFind(){
+  $$("#findList .fb-hit").forEach((b, i) => { const on = i === findSel; b.setAttribute("aria-selected", String(on)); if (on) b.scrollIntoView({ block: "nearest" }); });
+}
+function findJump(){
+  const h = findHits[findSel]; if (!h || !isFinite(v.duration)) return;
+  seekTo(Math.min(v.duration - .05, h.t + (h.time ? 0 : 0.02)));
+  osd(h.time ? "Jumped to " + fmt(h.t) : "Jumped to " + fmt(h.t) + " · Enter or click another line, Esc to close");
+}
+function openFind(){
+  if (!cur) return;
+  const bar = $("#findBar"); bar.hidden = false;
+  const q = $("#findQ"); q.focus(); q.select();
+  runFind();
+}
+function closeFind(){ $("#findBar").hidden = true; stage.focus(); }
+$("#findQ").addEventListener("input", runFind);
+$("#findQ").addEventListener("keydown", e => {
+  e.stopPropagation();
+  if (e.key === "Escape") { e.preventDefault(); closeFind(); }
+  else if (e.key === "ArrowDown") { e.preventDefault(); if (findHits.length) { findSel = Math.min(findHits.length - 1, findSel + 1); markFind(); } }
+  else if (e.key === "ArrowUp") { e.preventDefault(); if (findHits.length) { findSel = Math.max(0, findSel - 1); markFind(); } }
+  else if (e.key === "Enter") { e.preventDefault(); findJump(); }
+});
+$("#findClose").onclick = closeFind;
+document.addEventListener("keydown", e => {
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "f" && cur && !$("#view-board").hidden) { e.preventDefault(); openFind(); }
+}, true);
+v.addEventListener("emptied", () => { if (!$("#findBar").hidden) closeFind(); });
 
 /* ---------------- settings sections ---------------- */
 (function groupSettings(){
