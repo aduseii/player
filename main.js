@@ -139,6 +139,12 @@ function createWindow(){
   });
   win.once("ready-to-show", () => win.show());
   win.webContents.on("did-finish-load", () => { if (pendingOpen.length) { win.webContents.send("open", pendingOpen); pendingOpen = []; } });
+  // if the page crashes (often the graphics driver), log why and bring the window back instead of leaving it blank
+  win.webContents.on("render-process-gone", (_e, d) => {
+    crashLog("window " + d.reason + " (exit " + d.exitCode + ")");
+    if (d.reason !== "clean-exit" && win && !win.isDestroyed()) setTimeout(() => { try { win.webContents.reload(); } catch {} }, 400);
+  });
+  win.webContents.on("unresponsive", () => crashLog("window stopped responding"));
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/i.test(url)) shell.openExternal(url); return { action: "deny" }; });
   // Right-click menu: editing for text fields, Copy for selections, and "Play link" anywhere else.
   win.webContents.on("context-menu", async (_e, p) => {
@@ -347,6 +353,17 @@ ipcMain.handle("stream-open", async (_e, url) => { try { const c = streamCache()
 ipcMain.handle("stream-close-all", () => { if (scache) scache.closeAll(); });
 ipcMain.handle("stream-stats", (_e, id) => scache ? scache.stats(id) : null);
 const netIn = input => /^https?:/i.test(String(input || "")) ? ["-user_agent", NET_UA, "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_on_network_error", "1", "-reconnect_on_http_error", "5xx", "-reconnect_delay_max", "8", "-rw_timeout", "30000000"] : [];
+/* ---------- crash log: %APPDATA%/Crave/crash-log.txt ---------- */
+function crashLog(msg){
+  try {
+    const f = path.join(app.getPath("userData"), "crash-log.txt");
+    let old = ""; try { old = fs.readFileSync(f, "utf8").slice(-20000); } catch {}
+    fs.writeFileSync(f, old + new Date().toISOString() + "  Crave " + app.getVersion() + "  " + msg + "\n");
+  } catch {}
+}
+app.on("child-process-gone", (_e, d) => { if (d.reason !== "clean-exit") crashLog(d.type + " process " + d.reason + " (exit " + d.exitCode + ")" + (d.name ? " " + d.name : "")); });
+process.on("uncaughtException", err => crashLog("main error: " + (err && err.stack || err)));
+process.on("unhandledRejection", err => crashLog("main promise: " + (err && err.stack || err)));
 /* ---------- Home pictures: a full-size still of each video, kept on disk ---------- */
 const thumbDir = () => path.join(app.getPath("userData"), "thumbs");
 const thumbFile = id => path.join(thumbDir(), String(id).replace(/[^a-z0-9_-]/gi, "_").slice(0, 120) + ".jpg");

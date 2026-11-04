@@ -1806,8 +1806,10 @@ function saveThumb(id, force){
     if (tainted || !v.videoWidth || v.readyState < 2) return;
     if (!force && Date.now() - (thumbAt[id] || 0) < 60000) return;
     thumbAt[id] = Date.now();
-    const full = !!(N && N.thumbSave), w = full ? v.videoWidth : Math.min(960, v.videoWidth), h = Math.round(w * v.videoHeight / v.videoWidth);
-    const c = document.createElement("canvas"); c.width = w; c.height = h; c.getContext("2d").drawImage(v, 0, 0, w, h);
+    // up to 1920 wide (sharp on any screen, light on the graphics card; 4K frames are scaled down)
+    const full = !!(N && N.thumbSave), w = Math.min(full ? 1920 : 960, v.videoWidth), h = Math.round(w * v.videoHeight / v.videoWidth);
+    const src = (typeof hdrActive === "function" && hdrActive()) ? hdrFrameCanvas() : null;
+    const c = document.createElement("canvas"); c.width = w; c.height = h; c.getContext("2d").drawImage(src || v, 0, 0, w, h);
     const url = c.toDataURL("image/jpeg", full ? 0.92 : 0.82);
     thumbCache[id] = url;
     if (full) { N.thumbSave(id, url); return; }
@@ -2370,10 +2372,15 @@ function switchView(name){
 $$(".tab[data-view]").forEach(t => t.onclick = () => switchView(t.dataset.view));
 // Home: leave the video (its place is saved, so it shows under Continue watching) and show the Home screen
 function goHome(){
-  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-  if (cur) stop();
-  if (!document.body.classList.contains("po")) setPlayerMode(true);
-  try { renderHome(true); $(".home").scrollTop = 0; } catch {}
+  // pause first, then leave on the next frame, each step on its own so one failing can't take the rest down
+  try { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch {}
+  try { if (!v.paused) v.pause(); } catch {}
+  try { $("#findBar").hidden = true; } catch {}
+  setTimeout(() => {
+    try { if (cur) stop(); } catch (err) { console.warn("Crave: closing the video failed", err); try { teardown(); } catch {} cur = null; stage.classList.add("is-empty"); $("#hud").hidden = true; }
+    try { if (!document.body.classList.contains("po")) setPlayerMode(true); } catch {}
+    try { renderHome(true); $(".home").scrollTop = 0; } catch {}
+  }, 30);
 }
 $("#homeTab").onclick = goHome;
 $("#brandHome").onclick = goHome;
@@ -4754,12 +4761,12 @@ const looksLikeLink = q => /^(https?:|magnet:|ftp:|file:|[a-z]:\\|\/)/i.test(q) 
 let homeUrls = [];
 const shotUrlFor = s => { const u = URL.createObjectURL(s.blob); homeUrls.push(u); return u; };
 const thumbOf = id => thumbCache[id] || (thumbs[id] || {}).u || "";
-const thumbAsked = {};
+const thumbAsked = {}; let thumbQueue = Promise.resolve();
 function fillThumb(e, img){
   // img: the element to fill in when the picture arrives
   if (!N || !N.thumbGet || thumbAsked[e.id]) return;
   thumbAsked[e.id] = true;
-  N.thumbGet(e.id, e.path || e.url || "", e.pos > 5 ? e.pos : Math.min(120, (e.dur || 600) * 0.1)).then(u => {
+  thumbQueue = thumbQueue.then(() => N.thumbGet(e.id, e.path || e.url || "", e.pos > 5 ? e.pos : Math.min(120, (e.dur || 600) * 0.1))).then(u => {
     if (!u) return; thumbCache[e.id] = u;
     homeDirty = true; renderHome(true);
   }).catch(() => {});
