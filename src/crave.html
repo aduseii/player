@@ -1056,6 +1056,16 @@ html[data-look="tv"] .tab[aria-selected="true"] .count{color:color-mix(in srgb,v
 .clip-crop span{background:var(--a);color:var(--a-ink)}
 .stage:has(.clip-crop:not([hidden])){overflow:hidden}
 .clip-len .linkbtn{margin-left:8px;color:var(--a);font-size:12.5px}
+.clip-row .nud{min-width:26px;padding:0 6px;font-size:15px;line-height:1}
+.clip-t.bad{border-color:var(--bad)!important}
+.clip-hint{font-size:11.5px;color:var(--muted);line-height:1.3}
+.clip-row .clip-hint{flex:1}
+.clip-thumb{display:flex;gap:10px;align-items:flex-start;padding:4px 8px 6px}
+.ct-img{width:96px;height:96px;flex:none;border-radius:8px;background:rgba(0,0,0,.35);display:grid;place-items:center;overflow:hidden;border:.5px solid var(--glass-line)}
+.ct-img img{max-width:100%;max-height:100%;display:block}
+.ct-img span{font-size:11px;color:var(--muted);text-align:center;padding:6px}
+.ct-side{display:flex;flex-direction:column;gap:6px;align-items:flex-start;min-width:0}
+.ct-side .clip-ck{padding:0}
 </style>
 </head>
 <body>
@@ -4068,10 +4078,16 @@ function hdrFrameCanvas(){
 /* ================= clip mode ================= */
 const clip = { on: false, a: 0, b: 0, previewing: false, busy: false, format: "mp4", mode: "fast", height: 0, width: 640, subs: false, keepHdr: false, look: false };
 let clipsList = store.get("clips", []);
-const fmtExact = t => { if (!isFinite(t)) t = 0; const m = Math.floor(t / 60), s = t - m * 60, h = Math.floor(m / 60); return (h ? h + ":" + String(m % 60).padStart(2, "0") : m) + ":" + s.toFixed(1).padStart(4, "0"); };
+const fmtExact = (t, d = 1) => { if (!isFinite(t)) t = 0; const k = Math.pow(10, d); t = Math.round(t * k) / k; const m = Math.floor(t / 60), s = t - m * 60, h = Math.floor(m / 60); return (h ? h + ":" + String(m % 60).padStart(2, "0") : m) + ":" + s.toFixed(d).padStart(3 + d, "0"); };
+// 1:02:03.5, 62:03, 75.5, "1h 2m 3s", "2m30", "90s" all work
 function parseTime(s){
-  s = String(s).trim().replace(",", "."); if (!s) return NaN;
-  const p = s.split(":").map(Number); if (p.some(x => !isFinite(x))) return NaN;
+  s = String(s).trim().toLowerCase().replace(",", "."); if (!s) return NaN;
+  if (/[hms]/.test(s)) {
+    const m = /^(?:(\d+(?:\.\d+)?)\s*h)?\s*(?:(\d+(?:\.\d+)?)\s*m(?:in)?)?\s*(?:(\d+(?:\.\d+)?)\s*s?(?:ec)?)?$/.exec(s);
+    if (!m || (!m[1] && !m[2] && !m[3])) return NaN;
+    return (+(m[1] || 0)) * 3600 + (+(m[2] || 0)) * 60 + (+(m[3] || 0));
+  }
+  const p = s.split(":").map(x => x.trim() === "" ? NaN : Number(x)); if (!p.length || p.length > 3 || p.some(x => !isFinite(x) || x < 0)) return NaN;
   return p.reduce((acc, x) => acc * 60 + x, 0);
 }
 const clipDur = () => (isFinite(v.duration) && v.duration > 0 ? v.duration : (cur && cur.probe && cur.probe.duration) || 0);
@@ -4084,7 +4100,7 @@ function enterClip(){
   clip.keepHdr = !!srcHDR();
   if (clip.format === "gif" && clip.b - clip.a > 30) clip.b = clip.a + 30;
   stage.classList.add("clipping"); $("#clipBtn").classList.add("on");
-  renderClip(); renderClipCrop(); poke();
+  renderClip(); renderClipCrop(); refreshThumbPreview(); poke();
 }
 function exitClip(){
   if (clip.busy) { toast("Wait for the clip to finish saving, or cancel it first."); return; }
@@ -4097,7 +4113,7 @@ function setClipEdge(which, t){
   t = Math.max(0, Math.min(d, t));
   if (which === "a") clip.a = Math.min(t, clip.b - 0.5); else clip.b = Math.max(t, clip.a + 0.5);
   clip.a = Math.max(0, clip.a); clip.b = Math.min(d, clip.b);
-  renderClip();
+  renderClip(); if (which === "a" && clip.thumb === "first") refreshThumbPreview();
 }
 function renderClipRange(){
   const r = $("#clipRange"), d = clipDur();
@@ -4119,9 +4135,11 @@ function renderClip(){
   const canExport = !!(N && N.clipExport && nativeInput());
   const tooLongGif = clip.format === "gif" && len > 30;
   const sel = (id, opts, val) => `<select id="${id}">${opts.map(([v2, l]) => `<option value="${v2}"${String(v2) === String(val) ? " selected" : ""}>${l}</option>`).join("")}</select>`;
+  const nudge = w => `<button class="btn sm ghost nud" data-nudge="${w}:-1" title="Back one frame (Shift: 1 second)" aria-label="Back one frame">‹</button><button class="btn sm ghost nud" data-nudge="${w}:1" title="Forward one frame (Shift: 1 second)" aria-label="Forward one frame">›</button>`;
   let h = `<h4>Clip</h4>
-    <div class="clip-row"><label for="clipA">Start</label><input id="clipA" class="clip-t mono" value="${fmtExact(clip.a)}" spellcheck="false"><button class="btn sm" data-set="a" title="Set start to now (I)">Now</button></div>
-    <div class="clip-row"><label for="clipB">End</label><input id="clipB" class="clip-t mono" value="${fmtExact(clip.b)}" spellcheck="false"><button class="btn sm" data-set="b" title="Set end to now (O)">Now</button></div>
+    <div class="clip-row"><label for="clipA">Start</label><input id="clipA" class="clip-t mono" value="${fmtExact(clip.a, 2)}" spellcheck="false" placeholder="0:00.00" title="Type a time like 12:30, 1:02:03.5 or 2m30s, then Enter">${nudge("a")}<button class="btn sm" data-set="a" title="Set start to now (I)">Now</button><button class="btn sm ghost" data-go="a" title="Go to the start">Go</button></div>
+    <div class="clip-row"><label for="clipB">End</label><input id="clipB" class="clip-t mono" value="${fmtExact(clip.b, 2)}" spellcheck="false" placeholder="0:30.00" title="Type a time like 12:30, 1:02:03.5 or 2m30s, then Enter">${nudge("b")}<button class="btn sm" data-set="b" title="Set end to now (O)">Now</button><button class="btn sm ghost" data-go="b" title="Go to the end">Go</button></div>
+    <div class="clip-row"><label for="clipL">Length</label><input id="clipL" class="clip-t mono" value="${fmtExact(len, 2)}" spellcheck="false" title="Type a length like 15, 0:45 or 1m; the end moves to match"><span class="clip-hint">Times: 12:30, 1:02:03.5, 2m30s</span></div>
     <div class="clip-len mono">${len.toFixed(1)} s${tooLongGif ? ` <span style="color:var(--bad)">· GIFs can be up to 30 s</span>` : ""}${clip.format !== "gif" && (clip.a > 0.05 || clip.b < clipDur() - 0.05) ? ` <button class="linkbtn" id="clipWhole">Use the whole video</button>` : ""}</div>
     <div class="clip-grid">
       <label>Save as</label>${sel("clipFmt", [["mp4", "MP4 video"], ["gif", "GIF"], ["m4a", "Audio only (M4A)"]], clip.format)}`;
@@ -4137,6 +4155,17 @@ function renderClip(){
   if (clip.format !== "m4a" && logos.length) {
     const cl = curLogo();
     h += `<div class="clip-grid"><label>Logo</label>${sel("clipLogo", [["", "No logo"]].concat(logos.map(l => [l.id, l.name])), cl ? cl.id : "")}</div>`;
+  }
+  if (clip.format !== "gif") {
+    const tm = clip.thumb || "none";
+    h += `<div class="clip-grid"><label>Thumbnail</label>${sel("clipThumb", [["none", "None"], ["first", "First frame of the clip"], ["frame", "A frame I pick"], ["file", "An image from my computer…"]], tm)}</div>`;
+    if (tm !== "none") {
+      h += `<div class="clip-thumb"><div class="ct-img">${clipThumbPrev ? `<img src="${clipThumbPrev}" alt="Thumbnail preview">` : `<span>Preview appears here</span>`}</div><div class="ct-side">`;
+      if (tm === "frame") h += `<button class="btn sm" id="clipThumbHere">Use this frame (${fmtExact(v.currentTime || 0)})</button>${clip.thumbT != null ? `<span class="clip-hint">Picked ${fmtExact(clip.thumbT)}</span>` : `<span class="clip-hint">Pause on the frame you want, then click.</span>`}`;
+      if (tm === "file") h += `<button class="btn sm" id="clipThumbPick">${clip.thumbFile ? "Choose another image…" : "Choose an image…"}</button>${clip.thumbFileName ? `<span class="clip-hint">${esc(clip.thumbFileName)}</span>` : ""}`;
+      if (tm === "first") h += `<span class="clip-hint">The frame at ${fmtExact(clip.a)}.</span>`;
+      h += `<label class="clip-ck"><input type="checkbox" id="clipThumbJpg" ${clip.thumbJpg ? "checked" : ""}> Also save it as a picture</label></div></div>`;
+    }
   }
   if (clip.format !== "m4a") {
     if (sub && (sub.tt || sub.pgs)) h += `<label class="clip-ck"><input type="checkbox" id="clipSubs" ${clip.subs ? "checked" : ""}> Burn in subtitles (${esc(sub.label)})</label>`;
@@ -4155,16 +4184,35 @@ function renderClip(){
   if (clip.busy) h += `<div class="clip-prog"><div class="pbar"><i id="clipBar" style="width:${Math.round((clip.p || 0) * 100)}%"></i></div><span class="mono" id="clipPct">${Math.round((clip.p || 0) * 100)}%</span><button class="btn sm" id="clipCancel">Cancel</button></div>`;
   else h += `<div class="clip-actions"><button class="btn sm" id="clipPrev">${clip.previewing ? "Stop preview" : "Preview"}</button><button class="btn sm primary" id="clipGo" ${canExport && !tooLongGif ? "" : "disabled"}>Save clip</button><button class="btn sm ghost" id="clipClose">Close</button></div>`;
   pnl.innerHTML = h;
-  const onT = (id, which) => { const el = $(id); el.onchange = () => { const t = parseTime(el.value); if (isFinite(t)) setClipEdge(which, t); else renderClip(); }; el.onkeydown = e => { e.stopPropagation(); if (e.key === "Enter") el.blur(); }; };
-  onT("#clipA", "a"); onT("#clipB", "b");
+  const onT = (id, which) => {
+    const el = $(id); if (!el) return;
+    el.oninput = () => el.classList.toggle("bad", el.value.trim() !== "" && !isFinite(parseTime(el.value)));
+    el.onchange = () => {
+      const t = parseTime(el.value);
+      if (!isFinite(t)) { toast("That isn't a time Crave understands. Try 12:30, 1:02:03.5 or 2m30s.", true); renderClip(); return; }
+      if (which === "len") { setClipEdge("b", clip.a + Math.max(0.5, t)); return; }
+      if (t > clipDur()) toast("The video is only " + fmt(clipDur()) + " long.");
+      setClipEdge(which, t); v.currentTime = which === "a" ? clip.a : clip.b;
+    };
+    el.onkeydown = e => { e.stopPropagation(); if (e.key === "Enter") el.blur(); };
+  };
+  onT("#clipA", "a"); onT("#clipB", "b"); onT("#clipL", "len");
   pnl.querySelectorAll("[data-set]").forEach(b => b.onclick = () => setClipEdge(b.dataset.set, v.currentTime));
+  pnl.querySelectorAll("[data-go]").forEach(b => b.onclick = () => { v.pause(); v.currentTime = b.dataset.go === "a" ? clip.a : Math.max(clip.a, clip.b - 0.04); });
+  pnl.querySelectorAll("[data-nudge]").forEach(b => b.onclick = e => {
+    const [w, d] = b.dataset.nudge.split(":"), step = e.shiftKey ? 1 : 1 / frameRate();
+    setClipEdge(w, (w === "a" ? clip.a : clip.b) + (+d) * step); v.pause(); v.currentTime = w === "a" ? clip.a : Math.max(clip.a, clip.b - 0.04);
+  });
   const bindSel = (id, key, num) => { const el = $(id); if (el) el.onchange = () => { clip[key] = num ? +el.value : el.value; if (key === "format" && clip.format === "gif" && clip.b - clip.a > 30) clip.b = clip.a + 30; renderClip(); }; };
   bindSel("#clipFmt", "format");
   if ($("#clipCropSel")) $("#clipCropSel").onchange = e => { setClipCrop(e.target.value); };
   if ($("#clipWhole")) $("#clipWhole").onclick = () => { clip.a = 0; clip.b = clipDur(); renderClip(); };
   if ($("#clipLogo")) $("#clipLogo").onchange = e => setCurLogo(e.target.value || null); bindSel("#clipMode", "mode"); bindSel("#clipH", "height", true); bindSel("#clipW", "width", true);
   const bindCk = (id, key) => { const el = $(id); if (el) el.onchange = () => { clip[key] = el.checked; renderClip(); }; };
-  bindCk("#clipSubs", "subs"); bindCk("#clipHdr", "keepHdr"); bindCk("#clipLook", "look");
+  bindCk("#clipSubs", "subs"); bindCk("#clipHdr", "keepHdr"); bindCk("#clipLook", "look"); bindCk("#clipThumbJpg", "thumbJpg");
+  if ($("#clipThumb")) $("#clipThumb").onchange = e => { clip.thumb = e.target.value; S.clipThumb = clip.thumb; saveSettings(); refreshThumbPreview(); renderClip(); if (clip.thumb === "file" && !clip.thumbFile) pickThumbFile(); };
+  if ($("#clipThumbHere")) $("#clipThumbHere").onclick = () => { v.pause(); clip.thumbT = v.currentTime; refreshThumbPreview(); };
+  if ($("#clipThumbPick")) $("#clipThumbPick").onclick = pickThumbFile;
   if ($("#clipPrev")) $("#clipPrev").onclick = togglePreview;
   if ($("#clipGo")) $("#clipGo").onclick = exportClip;
   if ($("#clipClose")) $("#clipClose").onclick = exitClip;
@@ -4224,6 +4272,12 @@ async function exportClip(){
     const shape = (r.w / r.h) / (16 / 9);
     if (shape < 1) opts.subStyle.size = Math.max(9, Math.round(size * Math.sqrt(shape)));
     opts.logo = clipLogoOpt(clip.format, 0, clip.width, clip.format === "gif" ? clip.width : o.w);
+  }
+  if (clip.format !== "gif" && clip.thumb && clip.thumb !== "none") {
+    try { opts.thumb = await makeClipThumb(); } catch (err) { console.warn(err); }
+    if (!opts.thumb) toast(clip.thumb === "file" ? "Choose an image for the thumbnail first, or set Thumbnail to None." : "Couldn't make the thumbnail; saving without one.", true);
+    if (!opts.thumb && clip.thumb === "file") return;
+    opts.thumbJpg = !!clip.thumbJpg;
   }
   const me = cur;
   clip.busy = true; clip.p = 0; renderClip();
@@ -5048,7 +5102,7 @@ function setClipCrop(id){
   clip.crop = id || ""; S.clipCrop = clip.crop; saveSettings();
   clipCropSt = { cx: 0.5, cy: 0.5, s: 1, fw: 0.6, fh: 0.6 };
   if (clip.crop && !v.paused) v.pause();
-  renderClip(); renderClipCrop(); renderShotsMode();
+  renderClip(); renderClipCrop(); renderShotsMode(); refreshThumbPreview();
 }
 // the crop inside a W x H picture, in that picture's pixels
 function clipCropRect(W, H){
@@ -5115,6 +5169,79 @@ try { new ResizeObserver(renderClipCrop).observe(stage); } catch {}
   g.addEventListener("dblclick", e => { e.stopPropagation(); clipCropSt = { cx: 0.5, cy: 0.5, s: 1, fw: 0.6, fh: 0.6 }; renderClipCrop(); });
 })();
 clip.crop = S.clipCrop || "";
+
+/* ---------------- clip thumbnail (cover picture embedded in the clip) ---------------- */
+let clipThumbPrev = "";
+clip.thumb = S.clipThumb || "none"; clip.thumbT = null; clip.thumbFile = ""; clip.thumbFileName = ""; clip.thumbJpg = false;
+// the output picture size: the crop's size if cropping, else the video's (up to 1920 wide)
+function thumbSize(){
+  const o = typeof cropOut === "function" ? cropOut() : null;
+  if (o && clip.format !== "gif") return o;
+  const vw = v.videoWidth || 1920, vh = v.videoHeight || 1080, w = Math.min(1920, vw);
+  return { w, h: Math.round(w * vh / vw / 2) * 2 };
+}
+function frameToJpeg(){
+  const src = (typeof hdrActive === "function" && hdrActive()) ? hdrFrameCanvas() : v;
+  const W = v.videoWidth, H = v.videoHeight; if (!W || !H) return "";
+  const r = cropPreset() ? clipCropRect(W, H) : { x: 0, y: 0, w: W, h: H }, o = thumbSize();
+  const c = document.createElement("canvas"); c.width = o.w; c.height = o.h;
+  const ctx = c.getContext("2d"); ctx.imageSmoothingQuality = "high";
+  const sx = (src.width || W) / W, sy = (src.height || H) / H;
+  ctx.drawImage(src, r.x * sx, r.y * sy, r.w * sx, r.h * sy, 0, 0, o.w, o.h);
+  return c.toDataURL("image/jpeg", 0.92);
+}
+function seekAndWait(t){
+  return new Promise(res => {
+    if (Math.abs(v.currentTime - t) < 0.001 && v.readyState >= 2) { res(); return; }
+    const done = () => { v.removeEventListener("seeked", done); setTimeout(res, 60); };
+    v.addEventListener("seeked", done); v.currentTime = t; setTimeout(done, 4000);
+  });
+}
+async function frameAt(t){
+  const back = v.currentTime, wasPlaying = !v.paused; v.pause();
+  await seekAndWait(t); const u = frameToJpeg();
+  await seekAndWait(back); if (wasPlaying) v.play().catch(() => {});
+  return u;
+}
+// an image file, fitted to fill the clip's shape (centre-cropped)
+function fitImage(dataUrl){
+  return new Promise(res => {
+    const im = new Image(); im.onload = () => {
+      const o = thumbSize(), c = document.createElement("canvas"); c.width = o.w; c.height = o.h;
+      const s2 = Math.max(o.w / im.naturalWidth, o.h / im.naturalHeight), dw = im.naturalWidth * s2, dh = im.naturalHeight * s2;
+      const ctx = c.getContext("2d"); ctx.imageSmoothingQuality = "high"; ctx.drawImage(im, (o.w - dw) / 2, (o.h - dh) / 2, dw, dh);
+      res(c.toDataURL("image/jpeg", 0.92));
+    };
+    im.onerror = () => res(""); im.src = dataUrl;
+  });
+}
+async function makeClipThumb(){
+  if (clip.thumb === "first") return frameAt(clip.a + 0.01);
+  if (clip.thumb === "frame") return clip.thumbT != null ? frameAt(clip.thumbT) : frameToJpeg();
+  if (clip.thumb === "file") return clip.thumbFile ? fitImage(clip.thumbFile) : "";
+  return "";
+}
+let thumbPrevTimer = 0;
+function refreshThumbPreview(){
+  clearTimeout(thumbPrevTimer);
+  thumbPrevTimer = setTimeout(async () => {
+    if (!clip.on || !clip.thumb || clip.thumb === "none") { clipThumbPrev = ""; return; }
+    try {
+      if (clip.thumb === "file") clipThumbPrev = clip.thumbFile ? await fitImage(clip.thumbFile) : "";
+      else if (clip.thumb === "frame" && clip.thumbT == null) clipThumbPrev = frameToJpeg();
+      else clipThumbPrev = await makeClipThumb();
+    } catch { clipThumbPrev = ""; }
+    if (clip.on && !clip.busy) renderClip();
+  }, 150);
+}
+function pickThumbFile(){
+  const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/png,image/jpeg,image/webp,image/gif,image/bmp";
+  inp.onchange = () => {
+    const f = inp.files && inp.files[0]; if (!f) return;
+    const rd = new FileReader(); rd.onload = () => { clip.thumbFile = String(rd.result); clip.thumbFileName = f.name; refreshThumbPreview(); renderClip(); }; rd.readAsDataURL(f);
+  };
+  inp.click();
+}
 
 /* ---------------- settings sections ---------------- */
 (function groupSettings(){

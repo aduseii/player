@@ -560,10 +560,14 @@ function clipArgs(o, out, { copy, withSubs, hw }){
   const dur = Math.max(0.1, o.end - o.start);
   const lg = o.logo && o.format !== "m4a" && fs.existsSync(logoPath(o.logo.id)) ? o.logo : null;
   // -t comes after every input so it applies to the output, not to the logo
-  const a = ["-hide_banner", "-nostdin", "-y", "-ss", o.start.toFixed(3), ...netIn(o.input), "-i", o.input].concat(lg ? ["-i", logoPath(lg.id)] : [], ["-t", dur.toFixed(3)]);
+  const th = o.thumbFile && o.format !== "gif" && fs.existsSync(o.thumbFile) ? (lg ? 2 : 1) : -1;   // input index of the thumbnail
+  const a = ["-hide_banner", "-nostdin", "-y", "-ss", o.start.toFixed(3), ...netIn(o.input), "-i", o.input].concat(lg ? ["-i", logoPath(lg.id)] : [], th >= 0 ? ["-i", o.thumbFile] : [], ["-t", dur.toFixed(3)]);
+  // the cover picture: a second video stream marked as the attached picture
+  const cover = th >= 0 ? ["-map", `${th}:v:0`, "-c:v:1", "mjpeg", "-pix_fmt:v:1", "yuvj420p", "-q:v:1", "2", "-disposition:v:1", "attached_pic"] : [];
   const audio = o.audioTrack != null && o.audioTrack >= 0 ? `0:a:${o.audioTrack}` : null;
   if (o.format === "m4a") {
     if (!audio) throw new Error("this video has no sound to save");
+    if (th >= 0) return a.concat(["-map", audio, "-map", `${th}:v:0`, "-c:v", "mjpeg", "-pix_fmt", "yuvj420p", "-disposition:v:0", "attached_pic", "-sn", "-dn", "-c:a", "aac", "-b:a", "256k"], o.audioLang ? ["-metadata:s:a:0", "language=" + o.audioLang] : [], ["-movflags", "+faststart", "-progress", "pipe:1", "-nostats", out]);
     return a.concat(["-map", audio, "-vn", "-sn", "-dn", "-c:a", "aac", "-b:a", "256k"], o.audioLang ? ["-metadata:s:a:0", "language=" + o.audioLang] : [], ["-movflags", "+faststart", "-progress", "pipe:1", "-nostats", out]);
   }
   // Video filters, in order: HDR → SDR (unless keeping HDR), subtitles, look, size.
@@ -614,17 +618,18 @@ function clipArgs(o, out, { copy, withSubs, hw }){
   }
   const args = a.slice();
   if (copy) {
-    args.push("-map", "0:v:0", "-c:v", "copy");
-    if (/hevc|h265/i.test(o.vcodec || "")) args.push("-tag:v", "hvc1");
+    args.push("-map", "0:v:0", "-c:v:0", "copy");
+    if (/hevc|h265/i.test(o.vcodec || "")) args.push("-tag:v:0", "hvc1");
   } else {
     if (complex) args.push("-filter_complex", complex + "[v]", "-map", "[v]");
-    else { args.push("-map", "0:v:0"); if (vf.length) args.push("-vf", vf.join(",")); }
+    else { args.push("-map", "0:v:0"); if (vf.length) args.push("-filter:v:0", vf.join(",")); }
     if (keepHdr) args.push("-c:v", "libx265", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p10le", "-tag:v", "hvc1",
       "-x265-params", `colorprim=bt2020:transfer=${o.hdr === "HLG" ? "arib-std-b67" : "smpte2084"}:colormatrix=bt2020nc:hdr10=1:log-level=error`);
     else if (hw && HW_ARGS[hw]) args.push(...HW_ARGS[hw]);
     else args.push("-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p");
   }
   if (audio) { args.push("-map", audio, "-c:a", "aac", "-b:a", "192k", "-ac", "2"); if (o.audioLang) args.push("-metadata:s:a:0", "language=" + o.audioLang); }
+  args.push(...cover);
   args.push("-sn", "-dn", "-map_metadata", "-1", "-avoid_negative_ts", "make_zero", "-movflags", "+faststart", "-progress", "pipe:1", "-nostats", out);
   return args;
 }
@@ -653,6 +658,10 @@ ipcMain.handle("clip-export", async (e, o) => {
   const out = clipName(o.name, o.start, o.end, ext);
   const dur = Math.max(0.1, o.end - o.start);
   const send = p => { if (!e.sender.isDestroyed()) e.sender.send("clip-progress", p); };
+  if (o.thumb && o.format !== "gif") {
+    const b64 = String(o.thumb).split(",")[1];
+    if (b64) { o.thumbFile = path.join(TMP, `clip-thumb-${Date.now()}.jpg`); fs.writeFileSync(o.thumbFile, Buffer.from(b64, "base64")); }
+  }
   if (o.sub && o.sub.kind === "text") {
     o.subFile = `clip-subs-${Date.now()}.srt`;
     fs.writeFileSync(path.join(TMP, o.subFile), o.sub.srt, "utf8");
@@ -673,7 +682,9 @@ ipcMain.handle("clip-export", async (e, o) => {
         const size = fs.statSync(out).size;
         if (size < 1024) throw new Error("the clip came out empty");
         send(1);
-        return { path: out, size, name: path.basename(out), folder: clipDir(), note: at.note || "", fast: !!at.copy, gpu: at.hw || "" };
+        let note = at.note || "";
+        if (o.thumbFile && o.thumbJpg) { try { fs.copyFileSync(o.thumbFile, out.replace(/\.[^.]+$/, "") + " thumbnail.jpg"); } catch { note = (note + " The thumbnail picture couldn't be saved.").trim(); } }
+        return { path: out, size, name: path.basename(out), folder: clipDir(), note, fast: !!at.copy, gpu: at.hw || "", thumb: !!o.thumbFile };
       } catch (err) {
         lastErr = err; try { fs.unlinkSync(out); } catch {}
         if (clipCancelled) throw err;
@@ -682,6 +693,7 @@ ipcMain.handle("clip-export", async (e, o) => {
     throw lastErr;
   } finally {
     if (o.subFile) { try { fs.unlinkSync(path.join(TMP, o.subFile)); } catch {} }
+    if (o.thumbFile) { try { fs.unlinkSync(o.thumbFile); } catch {} }
   }
 });
 ipcMain.handle("clip-cancel", () => { clipCancelled = true; if (clipProc) clipProc.kill(); });
