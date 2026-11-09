@@ -570,6 +570,9 @@ function clipArgs(o, out, { copy, withSubs, hw }){
   const vf = [];
   const keepHdr = o.hdr && o.keepHdr && o.format === "mp4";
   if (o.hdr && !keepHdr) vf.push("zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p");
+  // crop first, so subtitles are laid out on the cropped picture
+  const cr = o.crop && o.crop.w > 0 && o.crop.h > 0 ? o.crop : null;
+  if (cr) vf.push(`crop=${cr.w}:${cr.h}:${cr.x}:${cr.y}`);
   let complex = null;
   if (withSubs && o.sub && o.sub.kind === "text") {
     const st = o.subStyle || {};
@@ -588,6 +591,7 @@ function clipArgs(o, out, { copy, withSubs, hw }){
   }
   if (o.look > 0 && !keepHdr) { const k = o.look; vf.push(`eq=contrast=${(1 + 0.10 * k).toFixed(3)}:saturation=${(1 + 0.28 * k).toFixed(3)}:gamma=${(1 - 0.04 * k).toFixed(3)},unsharp=5:5:${(0.35 * k).toFixed(2)}:5:5:0`); }
   if (o.format === "gif") vf.push(`fps=${o.fps || 15}`, `scale=${o.width || 640}:-2:flags=lanczos`);
+  else if (cr && o.outW && o.outH) vf.push(`scale=${o.outW}:${o.outH}:flags=lanczos`, "setsar=1");
   else if (o.height) vf.push(`scale=-2:'min(${o.height},ih)':flags=lanczos`);
   if (withSubs && o.sub && o.sub.kind === "pgs") {
     // Picture subtitles are drawn over the full-size frame, then the rest of the chain runs.
@@ -655,7 +659,7 @@ ipcMain.handle("clip-export", async (e, o) => {
   }
   // Fast mode copies the picture without re-encoding; it falls back to a full encode if the format won't allow it.
   const attempts = [];
-  const canCopy = o.mode === "fast" && o.format === "mp4" && !o.sub && !o.look && !o.height && !o.logo && !(o.hdr && !o.keepHdr);
+  const canCopy = o.mode === "fast" && o.format === "mp4" && !o.sub && !o.look && !o.height && !o.logo && !o.crop && !(o.hdr && !o.keepHdr);
   if (canCopy) attempts.push({ copy: true, withSubs: false });
   const hw = o.format === "mp4" && !(o.hdr && o.keepHdr) ? await hwEncoder() : null;
   if (hw) attempts.push({ copy: false, withSubs: !!o.sub, hw });          // graphics card first; the processor if it fails

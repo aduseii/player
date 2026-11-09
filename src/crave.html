@@ -1052,6 +1052,10 @@ html[data-look="tv"] .tab[aria-selected="true"] .count{color:color-mix(in srgb,v
 .fb-x{flex:1;min-width:0}
 .fb-x mark{background:color-mix(in srgb,var(--a) 30%,transparent);color:inherit;border-radius:3px;padding:0 1px}
 .fb-empty{margin:0;padding:14px 12px;color:rgba(236,238,242,.6);font-size:13.5px;line-height:1.45}
+.clip-crop{box-shadow:0 0 0 9999px rgba(0,0,0,.55);outline:2px solid var(--a);outline-offset:-1px}
+.clip-crop span{background:var(--a);color:var(--a-ink)}
+.stage:has(.clip-crop:not([hidden])){overflow:hidden}
+.clip-len .linkbtn{margin-left:8px;color:var(--a);font-size:12.5px}
 </style>
 </head>
 <body>
@@ -1127,6 +1131,7 @@ html[data-look="tv"] .tab[aria-selected="true"] .count{color:color-mix(in srgb,v
           <canvas id="pgsLayer"></canvas>
           <img id="wmLayer" class="wm-layer" alt="" hidden>
           <div id="shotsGuide" class="shots-guide" hidden title="Drag to choose what goes in the screenshot · corners resize · double-click to reset"><span id="shotsGuideLbl">4:5 · drag to move</span><i data-c="tl"></i><i data-c="tr"></i><i data-c="bl"></i><i data-c="br"></i></div>
+          <div id="clipCrop" class="shots-guide clip-crop" hidden title="Drag to choose what stays in the video · corners resize · double-click to centre"><span id="clipCropLbl"></span><i data-c="tl"></i><i data-c="tr"></i><i data-c="bl"></i><i data-c="br"></i></div>
           <div class="subs-layer" id="subsTop"></div>
           <div class="subs-layer" id="subsBottom"></div>
 
@@ -1212,7 +1217,7 @@ html[data-look="tv"] .tab[aria-selected="true"] .count{color:color-mix(in srgb,v
                 <select class="speed-sel" id="speedSel" aria-label="Playback speed">
                   <option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2×</option><option value="3">3×</option>
                 </select></label>
-              <button class="cb hide-sm" id="clipBtn" title="Clip (X)"><svg class="i"><use href="#i-cut"/></svg></button>
+              <button class="cb hide-sm" id="clipBtn" title="Clip and crop (X)"><svg class="i"><use href="#i-cut"/></svg></button>
               <button class="cb" id="shotBtn" title="Screenshot (S)"><svg class="i"><use href="#i-cam"/></svg></button>
               <button class="cb" id="boardBtn" title="Shot board (D)" aria-label="Shot board" aria-pressed="false"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M14 4v16"/><path d="M16.5 8h2M16.5 11.5h2"/></svg></button>
               <button class="cb" id="hdrBtn" title="HDR mode (E)"><svg class="i"><use href="#i-hdr"/></svg><span class="lbl" id="hdrLbl" hidden>HDR</span></button>
@@ -4079,13 +4084,13 @@ function enterClip(){
   clip.keepHdr = !!srcHDR();
   if (clip.format === "gif" && clip.b - clip.a > 30) clip.b = clip.a + 30;
   stage.classList.add("clipping"); $("#clipBtn").classList.add("on");
-  renderClip(); poke();
+  renderClip(); renderClipCrop(); poke();
 }
 function exitClip(){
   if (clip.busy) { toast("Wait for the clip to finish saving, or cancel it first."); return; }
   clip.on = false; clip.previewing = false;
   stage.classList.remove("clipping"); $("#clipBtn").classList.remove("on");
-  $("#clipRange").hidden = true; $("#clipPanel").hidden = true; poke();
+  $("#clipRange").hidden = true; $("#clipPanel").hidden = true; renderClipCrop(); renderShotsMode(); poke();
 }
 function setClipEdge(which, t){
   const d = clipDur();
@@ -4117,12 +4122,14 @@ function renderClip(){
   let h = `<h4>Clip</h4>
     <div class="clip-row"><label for="clipA">Start</label><input id="clipA" class="clip-t mono" value="${fmtExact(clip.a)}" spellcheck="false"><button class="btn sm" data-set="a" title="Set start to now (I)">Now</button></div>
     <div class="clip-row"><label for="clipB">End</label><input id="clipB" class="clip-t mono" value="${fmtExact(clip.b)}" spellcheck="false"><button class="btn sm" data-set="b" title="Set end to now (O)">Now</button></div>
-    <div class="clip-len mono">${len.toFixed(1)} s${tooLongGif ? ` <span style="color:var(--bad)">· GIFs can be up to 30 s</span>` : ""}</div>
+    <div class="clip-len mono">${len.toFixed(1)} s${tooLongGif ? ` <span style="color:var(--bad)">· GIFs can be up to 30 s</span>` : ""}${clip.format !== "gif" && (clip.a > 0.05 || clip.b < clipDur() - 0.05) ? ` <button class="linkbtn" id="clipWhole">Use the whole video</button>` : ""}</div>
     <div class="clip-grid">
       <label>Save as</label>${sel("clipFmt", [["mp4", "MP4 video"], ["gif", "GIF"], ["m4a", "Audio only (M4A)"]], clip.format)}`;
+  if (clip.format !== "m4a") h += `<label>Crop</label>${sel("clipCropSel", CROPS.map(c => [c.id, c.label]), clip.crop || "")}`;
+  const cp = cropPreset();
   if (clip.format === "mp4") {
-    h += `<label>Quality</label>${sel("clipMode", [["fast", "Fast (no re-encode)"], ["exact", "Exact (frame-accurate)"]], clip.mode)}
-      <label>Size</label>${sel("clipH", [[0, "Original"], [2160, "4K"], [1080, "1080p"], [720, "720p"], [480, "480p"]], clip.height)}`;
+    h += `<label>Quality</label>${sel("clipMode", [["fast", "Fast (no re-encode)"], ["exact", "Exact (frame-accurate)"]], cp ? "exact" : clip.mode)}`;
+    if (!cp || !cp.w) h += `<label>Size</label>${sel("clipH", [[0, "Original"], [2160, "4K"], [1080, "1080p"], [720, "720p"], [480, "480p"]], clip.height)}`;
   } else if (clip.format === "gif") {
     h += `<label>Width</label>${sel("clipW", [[480, "480 px"], [640, "640 px"], [800, "800 px"]], clip.width)}`;
   }
@@ -4136,9 +4143,10 @@ function renderClip(){
     if (real && clip.format === "mp4") h += `<label class="clip-ck"><input type="checkbox" id="clipHdr" ${clip.keepHdr ? "checked" : ""}> Keep ${esc(real.replace(" / HDR10", ""))} (needs an HDR screen to look right)</label>`;
     if (hdrActive()) h += `<label class="clip-ck"><input type="checkbox" id="clipLook" ${clip.look ? "checked" : ""}> Include the HDR mode look</label>`;
   }
-  const reencode = clip.format === "mp4" && (clip.mode === "exact" || clip.height || !!curLogo() || (clip.subs && sub) || (clip.look && hdrActive()) || (real && !clip.keepHdr));
+  const reencode = clip.format === "mp4" && (clip.mode === "exact" || !!cp || clip.height || !!curLogo() || (clip.subs && sub) || (clip.look && hdrActive()) || (real && !clip.keepHdr));
   const audio = clipAudioIndex(), P = cur && cur.probe;
   const audioName = audio != null && P && P.audio && P.audio[audio] ? trackLabel(P.audio[audio], audio) : "";
+  if (cp && clip.format !== "m4a") { const o = cropOut(); h += `<p class="note crop-note">Saves ${o.w} × ${o.h}. Drag the frame on the video to choose what stays in; drag a corner to resize.</p>`; }
   h += `<p class="note">${clip.format === "m4a" ? (audioName ? `Saves ${esc(audioName)} audio.` : "Saves the current audio.") :
     clip.format === "gif" ? "GIFs have no sound." :
     reencode ? `Re-encodes the picture${audioName ? `, with ${esc(audioName)} audio` : ""}. Takes a little while.` :
@@ -4152,6 +4160,8 @@ function renderClip(){
   pnl.querySelectorAll("[data-set]").forEach(b => b.onclick = () => setClipEdge(b.dataset.set, v.currentTime));
   const bindSel = (id, key, num) => { const el = $(id); if (el) el.onchange = () => { clip[key] = num ? +el.value : el.value; if (key === "format" && clip.format === "gif" && clip.b - clip.a > 30) clip.b = clip.a + 30; renderClip(); }; };
   bindSel("#clipFmt", "format");
+  if ($("#clipCropSel")) $("#clipCropSel").onchange = e => { setClipCrop(e.target.value); };
+  if ($("#clipWhole")) $("#clipWhole").onclick = () => { clip.a = 0; clip.b = clipDur(); renderClip(); };
   if ($("#clipLogo")) $("#clipLogo").onchange = e => setCurLogo(e.target.value || null); bindSel("#clipMode", "mode"); bindSel("#clipH", "height", true); bindSel("#clipW", "width", true);
   const bindCk = (id, key) => { const el = $(id); if (el) el.onchange = () => { clip[key] = el.checked; renderClip(); }; };
   bindCk("#clipSubs", "subs"); bindCk("#clipHdr", "keepHdr"); bindCk("#clipLook", "look");
@@ -4203,8 +4213,18 @@ async function exportClip(){
     vcodec: vt ? vt.codec : "", hdr: (vt && vt.hdr) ? (/HLG/.test(vt.hdr) ? "HLG" : "HDR10") : "", keepHdr: clip.keepHdr,
     look: hdrActive() && clip.look && clip.format !== "m4a" ? hdrLevel() : 0,
     logo: clipLogoOpt(clip.format, clip.format === "mp4" ? clip.height : 0, clip.width),
-    sub: subOpt, subStyle: Object.assign({ font: fontInstalled("Netflix Sans") ? "Netflix Sans" : "Arial", size, pos: subPos(), shots: S.shotsMode ? shotsFrac((vt && vt.w) || v.videoWidth, (vt && vt.h) || v.videoHeight) * 0.92 : 0 }, subSt())
+    sub: subOpt, subStyle: Object.assign({ font: fontInstalled("Netflix Sans") ? "Netflix Sans" : "Arial", size, pos: subPos(), shots: S.shotsMode && !cropPreset() ? shotsFrac((vt && vt.w) || v.videoWidth, (vt && vt.h) || v.videoHeight) * 0.92 : 0 }, subSt())
   };
+  const cp = cropPreset();
+  if (cp && clip.format !== "m4a") {
+    const W = (vt && vt.w) || v.videoWidth, H = (vt && vt.h) || v.videoHeight, r = clipCropRect(W, H), ev = n => Math.max(2, Math.floor(n / 2) * 2);
+    opts.crop = { x: ev(r.x), y: ev(r.y), w: ev(r.w), h: ev(r.h) };
+    const o = cropOut(); opts.outW = o.w; opts.outH = o.h; opts.mode = "exact"; opts.height = 0;
+    // subtitles are laid out on the cropped picture; narrower pictures get a slightly smaller size so lines fit
+    const shape = (r.w / r.h) / (16 / 9);
+    if (shape < 1) opts.subStyle.size = Math.max(9, Math.round(size * Math.sqrt(shape)));
+    opts.logo = clipLogoOpt(clip.format, 0, clip.width, clip.format === "gif" ? clip.width : o.w);
+  }
   const me = cur;
   clip.busy = true; clip.p = 0; renderClip();
   try {
@@ -4442,6 +4462,7 @@ function cropRect(W, H){
 const shotsFrac = (vw, vh) => vw && vh ? Math.min(1, vh * SAR() / vw) : 1;    // full-height 4:5 width as a share of the picture width (clips)
 let picBox = null;
 function renderShotsMode(){
+  if (clip.on && clip.crop && cropPreset()) { $("#shotsGuide").hidden = true; return; }   // the clip's crop frame is in charge
   const on = !!S.shotsMode && !!cur && v.videoWidth > 0;
   stage.classList.toggle("shots-mode", on);
   const g = $("#shotsGuide");
@@ -4502,11 +4523,11 @@ async function drawLogoOnto(c){
   return true;
 }
 // Clips: sizes in pixels of the finished clip.
-function clipLogoOpt(format, height, gifWidth){
+function clipLogoOpt(format, height, gifWidth, forceW){
   const l = curLogo(); if (!l || format === "m4a") return null;
   const vt = cur.probe && cur.probe.video && cur.probe.video[0];
   const vw = v.videoWidth || (vt && vt.w) || 1920, vh = v.videoHeight || (vt && vt.h) || 1080;
-  const outW = format === "gif" ? gifWidth : height && height < vh ? Math.round(vw * height / vh) : vw;
+  const outW = forceW || (format === "gif" ? gifWidth : height && height < vh ? Math.round(vw * height / vh) : vw);
   const W = WM();
   return { id: l.id, w: outW * W.size / 100, m: outW * W.margin / 100, opacity: W.opacity / 100, pos: W.pos };
 }
@@ -5008,6 +5029,92 @@ document.addEventListener("keydown", e => {
   if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "f" && cur && !$("#view-board").hidden) { e.preventDefault(); openFind(); }
 }, true);
 v.addEventListener("emptied", () => { if (!$("#findBar").hidden) closeFind(); });
+
+/* ---------------- crop for clips: social sizes, or any shape ---------------- */
+const CROPS = [
+  { id: "", label: "No crop" },
+  { id: "9:16", label: "TikTok, Reels, Shorts (9:16)", ar: 9 / 16, w: 1080, h: 1920 },
+  { id: "4:5", label: "Instagram post (4:5)", ar: 4 / 5, w: 1080, h: 1350 },
+  { id: "1:1", label: "Square (1:1)", ar: 1, w: 1080, h: 1080 },
+  { id: "2:3", label: "Pinterest (2:3)", ar: 2 / 3, w: 1000, h: 1500 },
+  { id: "16:9", label: "YouTube, X (16:9)", ar: 16 / 9, w: 1920, h: 1080 },
+  { id: "1.91:1", label: "Instagram/Facebook landscape (1.91:1)", ar: 1.91, w: 1080, h: 566 },
+  { id: "4:3", label: "Classic TV (4:3)", ar: 4 / 3, w: 1440, h: 1080 },
+  { id: "free", label: "Free (any shape)" }
+];
+let clipCropSt = { cx: 0.5, cy: 0.5, s: 1, fw: 0.6, fh: 0.6 };   // centre; preset height share; free width/height shares
+function cropPreset(){ return clip.on && clip.format !== "m4a" ? CROPS.find(c => c.id && c.id === clip.crop) || null : null; }
+function setClipCrop(id){
+  clip.crop = id || ""; S.clipCrop = clip.crop; saveSettings();
+  clipCropSt = { cx: 0.5, cy: 0.5, s: 1, fw: 0.6, fh: 0.6 };
+  if (clip.crop && !v.paused) v.pause();
+  renderClip(); renderClipCrop(); renderShotsMode();
+}
+// the crop inside a W x H picture, in that picture's pixels
+function clipCropRect(W, H){
+  const cp = cropPreset(); if (!cp) return { x: 0, y: 0, w: W, h: H };
+  let w, h;
+  if (cp.ar) { h = H * clamp(clipCropSt.s, 0.15, 1); w = h * cp.ar; if (w > W) { w = W; h = w / cp.ar; } }
+  else { w = W * clamp(clipCropSt.fw, 0.08, 1); h = H * clamp(clipCropSt.fh, 0.08, 1); }
+  return { x: clamp(clipCropSt.cx * W - w / 2, 0, W - w), y: clamp(clipCropSt.cy * H - h / 2, 0, H - h), w, h };
+}
+function cropOut(){
+  const cp = cropPreset(); if (!cp) return null;
+  if (clip.format === "gif") { const vt = cur && cur.probe && cur.probe.video && cur.probe.video[0], r = clipCropRect((vt && vt.w) || v.videoWidth, (vt && vt.h) || v.videoHeight), gw = clip.width || 640; return { w: gw, h: Math.max(2, Math.round(gw * r.h / r.w / 2) * 2) }; }
+  if (cp.w) return { w: cp.w, h: cp.h };
+  const vt = cur && cur.probe && cur.probe.video && cur.probe.video[0], W = (vt && vt.w) || v.videoWidth, H = (vt && vt.h) || v.videoHeight, r = clipCropRect(W, H);
+  let w = r.w, h = r.h; if (clip.height && h > clip.height) { w = w * clip.height / h; h = clip.height; }
+  return { w: Math.max(2, Math.floor(w / 2) * 2), h: Math.max(2, Math.floor(h / 2) * 2) };
+}
+let cropBox = null;
+function renderClipCrop(){
+  const g = $("#clipCrop"), cp = cropPreset();
+  if (!cp || !cur || !v.videoWidth) { const was = !g.hidden; g.hidden = true; cropBox = null; if (was) { renderShotsMode(); try { renderCues(); } catch {} } return; }
+  const sw = stage.clientWidth, sh = picH(), sc = Math.min(sw / v.videoWidth, sh / v.videoHeight);
+  const pw = v.videoWidth * sc, ph = v.videoHeight * sc, ox = (sw - pw) / 2, oy = (sh - ph) / 2;
+  cropBox = { ox, oy, pw, ph };
+  const r = clipCropRect(pw, ph), o = cropOut();
+  Object.assign(g.style, { left: (ox + r.x) + "px", top: (oy + r.y) + "px", width: r.w + "px", height: r.h + "px" });
+  $("#clipCropLbl").textContent = (cp.ar ? cp.id : "Free") + " · " + o.w + " × " + o.h;
+  g.hidden = false;
+  // preview the subtitles inside the frame, the way they'll be burned in
+  const left = ox + r.x, top = oy + r.y;
+  stage.style.setProperty("--shots-l", (left + r.w * 0.04) + "px");
+  stage.style.setProperty("--shots-r", (sw - left - r.w * 0.96) + "px");
+  stage.style.setProperty("--shots-c", (left + r.w / 2) + "px");
+  stage.style.setProperty("--shots-w", (r.w * 0.92) + "px");
+  stage.style.setProperty("--shots-b", (stage.clientHeight - (top + r.h) + r.h * subPos() / 100) + "px");
+  if (!stage.classList.contains("shots-mode")) { stage.classList.add("shots-mode"); try { renderCues(); } catch {} }
+  const note = $("#clipPanel .crop-note"); if (note) note.textContent = `Saves ${o.w} × ${o.h}. Drag the frame on the video to choose what stays in; drag a corner to resize.`;
+}
+try { new ResizeObserver(renderClipCrop).observe(stage); } catch {}
+["loadedmetadata", "emptied"].forEach(ev => v.addEventListener(ev, renderClipCrop));
+(() => {
+  const g = $("#clipCrop"); let drag = null;
+  g.addEventListener("pointerdown", e => {
+    if (!cropBox) return; e.preventDefault(); e.stopPropagation(); g.setPointerCapture(e.pointerId);
+    drag = { corner: e.target.dataset.c || "", x: e.clientX, y: e.clientY, st: Object.assign({}, clipCropSt), r: clipCropRect(cropBox.pw, cropBox.ph) };
+  });
+  g.addEventListener("pointermove", e => {
+    if (!drag || !cropBox) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y, { pw, ph } = cropBox, cp = cropPreset(); if (!cp) return;
+    if (!drag.corner) { clipCropSt.cx = clamp(drag.st.cx + dx / pw, 0, 1); clipCropSt.cy = clamp(drag.st.cy + dy / ph, 0, 1); }
+    else {
+      const sx = drag.corner.includes("l") ? -1 : 1, sy = drag.corner.includes("t") ? -1 : 1;
+      const ax = sx > 0 ? drag.r.x : drag.r.x + drag.r.w, ay = sy > 0 ? drag.r.y : drag.r.y + drag.r.h;   // the corner that stays put
+      let nw, nh;
+      if (cp.ar) { nh = clamp(drag.r.h + Math.max(sx * dx / cp.ar, sy * dy), ph * 0.15, Math.min(ph, pw / cp.ar)); nw = nh * cp.ar; clipCropSt.s = nh / ph; }
+      else { nw = clamp(drag.r.w + sx * dx, pw * 0.08, pw); nh = clamp(drag.r.h + sy * dy, ph * 0.08, ph); clipCropSt.fw = nw / pw; clipCropSt.fh = nh / ph; }
+      clipCropSt.cx = (ax + sx * nw / 2) / pw; clipCropSt.cy = (ay + sy * nh / 2) / ph;
+    }
+    renderClipCrop();
+  });
+  const end = () => { drag = null; };
+  g.addEventListener("pointerup", end); g.addEventListener("pointercancel", end);
+  g.addEventListener("wheel", e => { e.preventDefault(); const k = e.deltaY > 0 ? 0.95 : 1.05; clipCropSt.s = clamp(clipCropSt.s * k, 0.15, 1); clipCropSt.fw = clamp(clipCropSt.fw * k, 0.08, 1); clipCropSt.fh = clamp(clipCropSt.fh * k, 0.08, 1); renderClipCrop(); }, { passive: false });
+  g.addEventListener("dblclick", e => { e.stopPropagation(); clipCropSt = { cx: 0.5, cy: 0.5, s: 1, fw: 0.6, fh: 0.6 }; renderClipCrop(); });
+})();
+clip.crop = S.clipCrop || "";
 
 /* ---------------- settings sections ---------------- */
 (function groupSettings(){
